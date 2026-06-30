@@ -10,16 +10,19 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko" className="h-full">
-      <body className="flex h-full overflow-hidden" style={{ background: 'var(--bg-base)' }}>
-        {/* 데스크탑 사이드바 */}
+      <body className="flex h-full overflow-hidden">
+        {/* 나이트 사이드바 */}
         <DesktopSidebar />
 
-        {/* 메인 콘텐츠 */}
-        <main className="flex-1 overflow-y-auto min-w-0 main-scroll">
+        {/* 데이 본문 */}
+        <main
+          className="flex-1 overflow-y-auto min-w-0 main-scroll"
+          style={{ background: 'var(--day-bg)' }}
+        >
           {children}
         </main>
 
-        {/* 모바일 하단 탭바 */}
+        {/* 모바일 탭바 */}
         <MobileTabBar />
       </body>
     </html>
