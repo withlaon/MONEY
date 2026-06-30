@@ -3,10 +3,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, Transaction, IncomeSource, ExpenseCategory, MonthlyStats } from '@/lib/supabase'
 import { getMonthRange } from '@/lib/utils'
+import {
+  serverAddIncomeSource,
+  serverAddExpenseCategory,
+  serverAddTransaction,
+  serverDeleteTransaction,
+} from '@/app/actions'
 
-// 간단한 인메모리 캐시 (같은 달 재방문 시 즉시 표시)
+// 인메모리 캐시
 const cache = new Map<string, Transaction[]>()
 
+/* ══════════════════════════════
+   거래 훅
+══════════════════════════════ */
 export function useTransactions(year: number, month: number) {
   const key = `${year}-${month}`
   const [transactions, setTransactions] = useState<Transaction[]>(() => cache.get(key) || [])
@@ -15,21 +24,15 @@ export function useTransactions(year: number, month: number) {
   const abortRef = useRef<AbortController | null>(null)
 
   const fetchTransactions = useCallback(async () => {
-    // 캐시 히트 → 백그라운드 갱신 (화면은 즉시 보임)
     const cached = cache.get(key)
-    if (cached) {
-      setTransactions(cached)
-      setLoading(false)
-    } else {
-      setLoading(true)
-    }
+    if (cached) { setTransactions(cached); setLoading(false) }
+    else setLoading(true)
 
-    // 이전 요청 취소
     abortRef.current?.abort()
     abortRef.current = new AbortController()
 
     const { start, end } = getMonthRange(year, month)
-    const { data, error } = await supabase
+    const { data, error: err } = await supabase
       .from('transactions')
       .select(`
         id, transaction_type, amount, transaction_date,
@@ -42,12 +45,11 @@ export function useTransactions(year: number, month: number) {
       .lte('transaction_date', end)
       .order('transaction_date', { ascending: false })
 
-    if (error) {
-      setError(error.message)
-    } else {
-      const result = data || []
-      cache.set(key, result as unknown as Transaction[])
-      setTransactions(result as unknown as Transaction[])
+    if (err) { setError(err.message) }
+    else {
+      const result = (data || []) as unknown as Transaction[]
+      cache.set(key, result)
+      setTransactions(result)
     }
     setLoading(false)
   }, [year, month, key])
@@ -57,22 +59,20 @@ export function useTransactions(year: number, month: number) {
     return () => { abortRef.current?.abort() }
   }, [fetchTransactions])
 
-  const addTransaction = async (t: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>) => {
-    const { data, error } = await supabase
-      .from('transactions')
-      .insert([t])
-      .select(`id, transaction_type, amount, transaction_date, description, memo, expense_type, is_fixed, income_source_id, expense_category_id, income_sources(id,name), expense_categories(id,name,type)`)
-      .single()
-    if (error) throw error
+  /* 거래 추가 — Server Action (한글 지원) */
+  const addTransaction = async (
+    t: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>
+  ) => {
+    const data = await serverAddTransaction(t)
     const updated = [data as unknown as Transaction, ...transactions]
     cache.set(key, updated)
     setTransactions(updated)
     return data
   }
 
+  /* 거래 삭제 — Server Action */
   const deleteTransaction = async (id: string) => {
-    const { error } = await supabase.from('transactions').delete().eq('id', id)
-    if (error) throw error
+    await serverDeleteTransaction(id)
     const updated = transactions.filter(t => t.id !== id)
     cache.set(key, updated)
     setTransactions(updated)
@@ -84,8 +84,9 @@ export function useTransactions(year: number, month: number) {
     totalExpense:    transactions.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0),
     officeExpense:   transactions.filter(t => t.transaction_type === 'expense' && t.expense_type === 'office').reduce((s, t) => s + t.amount, 0),
     personalExpense: transactions.filter(t => t.transaction_type === 'expense' && t.expense_type === 'personal').reduce((s, t) => s + t.amount, 0),
-    balance: transactions.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0) -
-             transactions.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0),
+    balance:
+      transactions.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0) -
+      transactions.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0),
     fixedExpense:    transactions.filter(t => t.transaction_type === 'expense' && t.is_fixed).reduce((s, t) => s + t.amount, 0),
     variableExpense: transactions.filter(t => t.transaction_type === 'expense' && !t.is_fixed).reduce((s, t) => s + t.amount, 0),
   }
@@ -93,7 +94,9 @@ export function useTransactions(year: number, month: number) {
   return { transactions, loading, error, stats, refetch: fetchTransactions, addTransaction, deleteTransaction }
 }
 
-/* ── 입금처 (앱 전체 캐시) ── */
+/* ══════════════════════════════
+   입금처 훅
+══════════════════════════════ */
 let srcCache: IncomeSource[] | null = null
 
 export function useIncomeSources() {
@@ -104,21 +107,15 @@ export function useIncomeSources() {
     if (srcCache) { setSources(srcCache); setLoading(false); return }
     supabase.from('income_sources').select('*').eq('is_active', true).order('name')
       .then(({ data }) => {
-        srcCache = data || []
-        setSources(srcCache)
+        srcCache = (data || []) as IncomeSource[]
+        setSources([...srcCache])
         setLoading(false)
       })
   }, [])
 
+  /* 입금처 추가 — Server Action (한글 지원) */
   const addSource = async (name: string, description?: string) => {
-    const { data, error } = await supabase
-      .from('income_sources')
-      .insert([{ name, description: description ?? null }])
-      .select('id, name, description, is_active')
-      .single()
-    if (error) throw new Error(error.message)
-    if (!data) throw new Error('입금처 데이터를 받지 못했습니다.')
-    const newItem = data as IncomeSource
+    const newItem = await serverAddIncomeSource(name, description ?? null) as IncomeSource
     srcCache = [...(srcCache ?? []), newItem]
     setSources([...srcCache])
     return newItem
@@ -127,7 +124,9 @@ export function useIncomeSources() {
   return { sources, loading, addSource }
 }
 
-/* ── 카테고리 (앱 전체 캐시) ── */
+/* ══════════════════════════════
+   카테고리 훅
+══════════════════════════════ */
 let catCache: ExpenseCategory[] | null = null
 
 export function useExpenseCategories() {
@@ -138,21 +137,15 @@ export function useExpenseCategories() {
     if (catCache) { setCategories(catCache); setLoading(false); return }
     supabase.from('expense_categories').select('*').eq('is_active', true).order('type')
       .then(({ data }) => {
-        catCache = data || []
-        setCategories(catCache)
+        catCache = (data || []) as ExpenseCategory[]
+        setCategories([...catCache])
         setLoading(false)
       })
   }, [])
 
+  /* 카테고리 추가 — Server Action (한글 지원) */
   const addCategory = async (name: string, type: 'office'|'personal', description?: string) => {
-    const { data, error } = await supabase
-      .from('expense_categories')
-      .insert([{ name, type, description: description ?? null }])
-      .select('id, name, type, description, is_active')
-      .single()
-    if (error) throw new Error(error.message)
-    if (!data) throw new Error('카테고리 데이터를 받지 못했습니다.')
-    const newItem = data as ExpenseCategory
+    const newItem = await serverAddExpenseCategory(name, type, description ?? null) as ExpenseCategory
     catCache = [...(catCache ?? []), newItem]
     setCategories([...catCache])
     return newItem
@@ -161,7 +154,9 @@ export function useExpenseCategories() {
   return { categories, loading, addCategory }
 }
 
-/* ── 월별 통계 (분석 페이지용) ── */
+/* ══════════════════════════════
+   월별 통계 훅 (분석 페이지)
+══════════════════════════════ */
 const statsCache = new Map<string, MonthlyStats>()
 
 export function useMonthlyStats(months: { year: number; month: number }[]) {
@@ -170,45 +165,41 @@ export function useMonthlyStats(months: { year: number; month: number }[]) {
 
   useEffect(() => {
     if (!months.length) return
-    const missing = months.filter(m => !statsCache.has(`${m.year}-${m.month}`))
 
-    // 캐시 있는 항목 즉시 표시
     const cached = months.map(m => statsCache.get(`${m.year}-${m.month}`)).filter(Boolean) as MonthlyStats[]
     if (cached.length === months.length) { setStats(cached); setLoading(false); return }
     if (cached.length > 0) setStats(cached)
 
-    const fetchAll = async () => {
-      setLoading(true)
-      const results: MonthlyStats[] = [...months.map(m => statsCache.get(`${m.year}-${m.month}`) || null).filter(Boolean) as MonthlyStats[]]
+    const missing = months.filter(m => !statsCache.has(`${m.year}-${m.month}`))
+    setLoading(true)
 
-      await Promise.all(missing.map(async ({ year, month }) => {
-        const { start, end } = getMonthRange(year, month)
-        const { data } = await supabase
-          .from('transactions')
-          .select('transaction_type, amount, expense_type, is_fixed')
-          .gte('transaction_date', start)
-          .lte('transaction_date', end)
+    Promise.all(missing.map(async ({ year, month }) => {
+      const { start, end } = getMonthRange(year, month)
+      const { data } = await supabase
+        .from('transactions')
+        .select('transaction_type, amount, expense_type, is_fixed')
+        .gte('transaction_date', start)
+        .lte('transaction_date', end)
 
-        const rows = data || []
-        const s: MonthlyStats = {
-          year, month,
-          totalIncome:     rows.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0),
-          totalExpense:    rows.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0),
-          officeExpense:   rows.filter(t => t.transaction_type === 'expense' && t.expense_type === 'office').reduce((s, t) => s + t.amount, 0),
-          personalExpense: rows.filter(t => t.transaction_type === 'expense' && t.expense_type === 'personal').reduce((s, t) => s + t.amount, 0),
-          balance: rows.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0) -
-                   rows.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0),
-          fixedExpense:    rows.filter(t => t.transaction_type === 'expense' && t.is_fixed).reduce((s, t) => s + t.amount, 0),
-          variableExpense: rows.filter(t => t.transaction_type === 'expense' && !t.is_fixed).reduce((s, t) => s + t.amount, 0),
-        }
-        statsCache.set(`${year}-${month}`, s)
-      }))
-
+      const rows = data || []
+      const s: MonthlyStats = {
+        year, month,
+        totalIncome:     rows.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0),
+        totalExpense:    rows.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0),
+        officeExpense:   rows.filter(t => t.transaction_type === 'expense' && t.expense_type === 'office').reduce((s, t) => s + t.amount, 0),
+        personalExpense: rows.filter(t => t.transaction_type === 'expense' && t.expense_type === 'personal').reduce((s, t) => s + t.amount, 0),
+        balance:
+          rows.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0) -
+          rows.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0),
+        fixedExpense:    rows.filter(t => t.transaction_type === 'expense' && t.is_fixed).reduce((s, t) => s + t.amount, 0),
+        variableExpense: rows.filter(t => t.transaction_type === 'expense' && !t.is_fixed).reduce((s, t) => s + t.amount, 0),
+      }
+      statsCache.set(`${year}-${month}`, s)
+    })).then(() => {
       setStats(months.map(m => statsCache.get(`${m.year}-${m.month}`)!).filter(Boolean))
       setLoading(false)
-    }
-
-    fetchAll()
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(months)])
 
   return { stats, loading }
