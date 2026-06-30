@@ -111,11 +111,17 @@ export function useIncomeSources() {
   }, [])
 
   const addSource = async (name: string, description?: string) => {
-    const { data, error } = await supabase.from('income_sources').insert([{ name, description }]).select().single()
-    if (error) throw error
-    srcCache = [...(srcCache || []), data]
-    setSources(srcCache)
-    return data
+    const { data, error } = await supabase
+      .from('income_sources')
+      .insert([{ name, description: description ?? null }])
+      .select('id, name, description, is_active')
+      .single()
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('입금처 데이터를 받지 못했습니다.')
+    const newItem = data as IncomeSource
+    srcCache = [...(srcCache ?? []), newItem]
+    setSources([...srcCache])
+    return newItem
   }
 
   return { sources, loading, addSource }
@@ -139,11 +145,17 @@ export function useExpenseCategories() {
   }, [])
 
   const addCategory = async (name: string, type: 'office'|'personal', description?: string) => {
-    const { data, error } = await supabase.from('expense_categories').insert([{ name, type, description }]).select().single()
-    if (error) throw error
-    catCache = [...(catCache || []), data]
-    setCategories(catCache)
-    return data
+    const { data, error } = await supabase
+      .from('expense_categories')
+      .insert([{ name, type, description: description ?? null }])
+      .select('id, name, type, description, is_active')
+      .single()
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('카테고리 데이터를 받지 못했습니다.')
+    const newItem = data as ExpenseCategory
+    catCache = [...(catCache ?? []), newItem]
+    setCategories([...catCache])
+    return newItem
   }
 
   return { categories, loading, addCategory }

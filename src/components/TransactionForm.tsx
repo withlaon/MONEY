@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Plus, TrendingUp, TrendingDown, Building2, User, Lock, Unlock } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { X, Plus, TrendingUp, TrendingDown, Building2, User, Lock, Zap, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Transaction } from '@/lib/supabase'
 import { useIncomeSources, useExpenseCategories } from '@/hooks/useTransactions'
@@ -12,16 +12,15 @@ interface Props {
   defaultType?: 'income' | 'expense'
 }
 
-const F: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--day-card2)',
-  border: '1px solid var(--day-border)',
-  borderRadius: 14,
-  padding: '12px 16px',
-  fontSize: 15,
-  color: 'var(--day-text1)',
-  transition: 'border-color 0.15s, box-shadow 0.15s',
+const INP: React.CSSProperties = {
+  width: '100%', background: '#f8faff', border: '1.5px solid #e4e9f5',
+  borderRadius: 10, padding: '11px 14px', fontSize: 14, color: '#111827',
+  transition: 'border-color 0.15s',
 }
+
+const Label = ({ t }: { t: string }) => (
+  <p style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', marginBottom: 8, letterSpacing: '0.02em' }}>{t}</p>
+)
 
 export default function TransactionForm({ onSubmit, onClose, defaultType = 'income' }: Props) {
   const { sources, addSource } = useIncomeSources()
@@ -36,261 +35,413 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
   const [catId,   setCatId]   = useState('')
   const [expType, setExpType] = useState<'office'|'personal'>('office')
   const [fixed,   setFixed]   = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
+
+  /* 입금처 추가 */
   const [addSrc,  setAddSrc]  = useState(false)
   const [newSrc,  setNewSrc]  = useState('')
+  const [srcSaving, setSrcSaving] = useState(false)
+  const [srcErr,  setSrcErr]  = useState('')
+
+  /* 카테고리 추가 */
   const [addCat,  setAddCat]  = useState(false)
   const [newCat,  setNewCat]  = useState('')
+  const [catSaving, setCatSaving] = useState(false)
+  const [catErr,  setCatErr]  = useState('')
 
-  const fmt = (v: string) => { const n = v.replace(/\D/g,''); return n ? Number(n).toLocaleString('ko-KR') : '' }
+  const newCatRef = useRef<HTMLInputElement>(null)
+
+  const fmt = (v: string) => {
+    const n = v.replace(/\D/g, '')
+    return n ? Number(n).toLocaleString('ko-KR') : ''
+  }
+
   const cats = categories.filter(c => c.type === expType)
 
+  /* ── 제출 ── */
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const raw = Number(amount.replace(/,/g,''))
+    const raw = Number(amount.replace(/,/g, ''))
     if (!raw) { setError('금액을 입력해주세요.'); return }
-    setLoading(true); setError('')
+    setSaving(true); setError('')
     try {
       await onSubmit({
-        transaction_type: type, amount: raw, transaction_date: date,
-        description: desc||null, memo: memo||null,
-        income_source_id:    type==='income'  ? (srcId||null) : null,
-        expense_category_id: type==='expense' ? (catId||null) : null,
-        expense_type: type==='expense' ? expType : null,
-        is_fixed: type==='expense' ? fixed : false,
+        transaction_type: type,
+        amount: raw,
+        transaction_date: date,
+        description: desc || null,
+        memo: memo || null,
+        income_source_id:    type === 'income'  ? (srcId || null) : null,
+        expense_category_id: type === 'expense' ? (catId || null) : null,
+        expense_type: type === 'expense' ? expType : null,
+        is_fixed: type === 'expense' ? fixed : false,
       })
       onClose()
-    } catch(err: unknown) { setError(err instanceof Error ? err.message : '저장 오류') }
-    finally { setLoading(false) }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '저장 중 오류가 발생했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
+  /* ── 입금처 추가 ── */
   const doSrc = async () => {
-    if (!newSrc.trim()) return
-    try { const s = await addSource(newSrc.trim()); setSrcId(s.id); setNewSrc(''); setAddSrc(false) }
-    catch { setError('입금처 추가 실패') }
-  }
-  const doCat = async () => {
-    if (!newCat.trim()) return
-    try { const c = await addCategory(newCat.trim(), expType); setCatId(c.id); setNewCat(''); setAddCat(false) }
-    catch { setError('카테고리 추가 실패') }
+    if (!newSrc.trim() || srcSaving) return
+    setSrcSaving(true); setSrcErr('')
+    try {
+      const s = await addSource(newSrc.trim())
+      setSrcId(s.id)
+      setNewSrc('')
+      setAddSrc(false)
+    } catch (e: unknown) {
+      setSrcErr(e instanceof Error ? e.message : '입금처 추가 실패')
+    } finally {
+      setSrcSaving(false)
+    }
   }
 
-  const Label = ({t}: {t:string}) => (
-    <p className="text-[13px] sm:text-[14px] font-bold mb-2" style={{ color: 'var(--day-text2)' }}>{t}</p>
+  /* ── 카테고리 추가 ── */
+  const doCat = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!newCat.trim() || catSaving) return
+    setCatSaving(true); setCatErr('')
+    try {
+      const c = await addCategory(newCat.trim(), expType)
+      if (!c || !c.id) throw new Error('카테고리 저장 실패')
+      setCatId(c.id)
+      setNewCat('')
+      setAddCat(false)
+    } catch (e: unknown) {
+      setCatErr(e instanceof Error ? e.message : '카테고리 추가 실패')
+    } finally {
+      setCatSaving(false)
+    }
+  }
+
+  /* 공통 2-버튼 토글 */
+  const Toggle2 = <T extends string>({
+    options, value, onChange,
+  }: {
+    options: { key: T; label: string; icon: React.ReactNode; active: { bg: string; border: string; color: string } }[]
+    value: T
+    onChange: (v: T) => void
+  }) => (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${options.length}, 1fr)`, gap: 8 }}>
+      {options.map(opt => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '10px 8px', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+            background: value === opt.key ? opt.active.bg : '#f8faff',
+            border: `1.5px solid ${value === opt.key ? opt.active.border : '#e4e9f5'}`,
+            color: value === opt.key ? opt.active.color : '#9ca3af',
+            transition: 'all 0.12s',
+          }}
+        >
+          {opt.icon}
+          {opt.label}
+        </button>
+      ))}
+    </div>
   )
 
   return (
+    /* ── 오버레이: 완전 불투명 어두운 배경 ── */
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-6"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-8"
       onClick={onClose}
-      style={{ background: 'rgba(15,18,32,0.6)', backdropFilter: 'blur(10px)' }}
+      style={{ background: 'rgba(0,0,0,0.82)' }}
     >
       <div
-        className="relative w-full sm:max-w-xl scale-in"
+        className="relative w-full sm:max-w-lg scale-in"
         style={{
-          background: 'var(--day-surface)',
-          border: '1px solid var(--day-border)',
-          /* 모바일: 위쪽만 둥글게 / 데스크탑: 완전 둥글게 */
-          borderRadius: 'clamp(20px, 3vw, 28px) clamp(20px, 3vw, 28px) 0 0',
-          boxShadow: 'var(--day-shadow-lg)',
+          background: '#ffffff',
+          borderRadius: '20px 20px 0 0',
+          boxShadow: '0 -8px 40px rgba(0,0,0,0.2)',
+          maxHeight: '92dvh',
+          display: 'flex',
+          flexDirection: 'column',
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* 핸들 (모바일) */}
-        <div className="flex justify-center pt-3.5 pb-1 sm:hidden">
-          <div className="w-12 h-1.5 rounded-full" style={{ background: 'var(--day-border2)' }} />
+        {/* 핸들 */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+          <div style={{ width: 40, height: 4, borderRadius: 99, background: '#e4e9f5' }} />
         </div>
 
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-7 py-5 sm:px-8 sm:py-5"
-          style={{ borderBottom: '1px solid var(--day-border)' }}>
-          <p className="text-[18px] sm:text-[20px] font-extrabold" style={{ color: 'var(--day-text1)' }}>
-            거래 추가
-          </p>
-          <button onClick={onClose}
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 20px 14px', borderBottom: '1px solid #f0f3fb',
+        }}>
+          <p style={{ fontSize: 17, fontWeight: 800, color: '#111827' }}>거래 추가</p>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 32, height: 32, borderRadius: 8, display:'flex', alignItems:'center', justifyContent:'center',
+              background: '#f3f4f6', border: 'none', cursor: 'pointer', color: '#6b7280',
+            }}
+          >
             <X size={15} />
           </button>
         </div>
 
-        <form onSubmit={submit}
-          className="px-7 py-6 sm:px-8 sm:py-7 space-y-5 overflow-y-auto"
-          style={{ maxHeight: 'min(78vh, 680px)' }}>
+        {/* 폼 */}
+        <form
+          onSubmit={submit}
+          style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}
+        >
 
-          {/* 수입/지출 탭 */}
-          <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl"
-            style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)' }}>
-            {(['income','expense'] as const).map(t => (
-              <button key={t} type="button" onClick={() => setType(t)}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl text-[15px] font-bold transition-all"
-                style={{
-                  background: type===t ? (t==='income' ? 'var(--income-soft)' : 'var(--expense-soft)') : 'transparent',
-                  border: `1px solid ${type===t ? (t==='income' ? 'var(--income-border)' : 'var(--expense-border)') : 'transparent'}`,
-                  color: type===t ? (t==='income' ? 'var(--income)' : 'var(--expense)') : 'var(--day-text3)',
-                  boxShadow: type===t ? 'var(--day-shadow)' : 'none',
-                }}>
-                {t==='income' ? <TrendingUp size={17}/> : <TrendingDown size={17}/>}
-                {t==='income' ? '수입' : '지출'}
-              </button>
-            ))}
-          </div>
+          {/* 수입 / 지출 선택 */}
+          <Toggle2
+            value={type}
+            onChange={setType}
+            options={[
+              { key: 'income' as const, label: '수입', icon: <TrendingUp size={15}/>,
+                active: { bg: '#ecfdf5', border: '#a7f3d0', color: '#059669' } },
+              { key: 'expense' as const, label: '지출', icon: <TrendingDown size={15}/>,
+                active: { bg: '#fef2f2', border: '#fca5a5', color: '#dc2626' } },
+            ]}
+          />
 
           {/* 금액 */}
           <div>
             <Label t="금액 *" />
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[16px] font-extrabold" style={{ color: 'var(--day-text3)' }}>₩</span>
-              <input type="text" value={amount} onChange={e => setAmount(fmt(e.target.value))}
-                placeholder="0" style={{ ...F, paddingLeft: 38 }} required
-                className="focus:border-[var(--primary)] focus:shadow-[0_0_0_3px_rgba(80,70,228,0.1)]" />
+            <div style={{ position: 'relative' }}>
+              <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, fontWeight:800, color:'#9ca3af' }}>₩</span>
+              <input
+                type="text" value={amount}
+                onChange={e => setAmount(fmt(e.target.value))}
+                placeholder="0"
+                required
+                style={{ ...INP, paddingLeft: 34 }}
+              />
             </div>
           </div>
 
           {/* 날짜 */}
           <div>
             <Label t="날짜 *" />
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={F} required
-              className="focus:border-[var(--primary)]" />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} required style={INP} />
           </div>
 
           {/* 내역 */}
           <div>
-            <Label t="내역" />
-            <input type="text" value={desc} onChange={e => setDesc(e.target.value)}
-              placeholder="예: 스마트스토어 6월 정산" style={F}
-              className="focus:border-[var(--primary)]" />
+            <Label t="내역 (선택)" />
+            <input
+              type="text" value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder={type === 'income' ? '예: 스마트스토어 6월 정산' : '예: 창고 임대료'}
+              style={INP}
+            />
           </div>
 
           {/* 수입: 입금처 */}
-          {type==='income' && (
+          {type === 'income' && (
             <div>
               <Label t="입금처" />
               {!addSrc ? (
-                <div className="flex gap-2">
-                  <select value={srcId} onChange={e => setSrcId(e.target.value)} style={{ ...F, flex:1 }}
-                    className="focus:border-[var(--primary)]">
+                <div style={{ display:'flex', gap:8 }}>
+                  <select
+                    value={srcId}
+                    onChange={e => setSrcId(e.target.value)}
+                    style={{ ...INP, flex:1 }}
+                  >
                     <option value="">선택하세요</option>
                     {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                  <button type="button" onClick={() => setAddSrc(true)}
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary-border)', color: 'var(--primary-light)' }}>
-                    <Plus size={17}/>
+                  <button
+                    type="button"
+                    onClick={() => setAddSrc(true)}
+                    style={{
+                      width:42, height:42, borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center',
+                      background: '#eef0fe', border: '1.5px solid #c7c3fa', color:'#4f46e5', cursor:'pointer', flexShrink:0,
+                    }}
+                  >
+                    <Plus size={16} />
                   </button>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <input autoFocus value={newSrc} onChange={e => setNewSrc(e.target.value)} placeholder="새 입금처 이름"
-                    style={{ ...F, flex:1, borderColor:'var(--primary)' }} onKeyDown={e => e.key==='Enter' && doSrc()}/>
-                  <button type="button" onClick={doSrc} className="px-4 rounded-xl text-[14px] font-bold"
-                    style={{ background: 'var(--primary)', color: 'white' }}>추가</button>
-                  <button type="button" onClick={() => {setAddSrc(false);setNewSrc('')}}
-                    className="px-3 rounded-xl text-[13px]"
-                    style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>취소</button>
+                <div style={{ background:'#f8faff', border:'1.5px solid #c7c3fa', borderRadius:12, padding:14, display:'flex', flexDirection:'column', gap:10 }}>
+                  <p style={{ fontSize:12, fontWeight:800, color:'#4f46e5' }}>새 입금처 추가</p>
+                  <input
+                    autoFocus
+                    value={newSrc}
+                    onChange={e => setNewSrc(e.target.value)}
+                    placeholder="입금처 이름 (예: 스마트스토어)"
+                    style={INP}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); doSrc() } }}
+                  />
+                  {srcErr && <p style={{ fontSize:12, color:'#dc2626' }}>{srcErr}</p>}
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button type="button" onClick={doSrc} disabled={!newSrc.trim() || srcSaving}
+                      style={{
+                        flex:1, padding:'9px', borderRadius:9, fontSize:13, fontWeight:800, cursor:'pointer',
+                        background:'#4f46e5', color:'#fff', border:'none', opacity: (!newSrc.trim()||srcSaving)?0.5:1,
+                      }}>
+                      <Check size={13} style={{ display:'inline', marginRight:5 }} />
+                      {srcSaving ? '추가 중...' : '추가'}
+                    </button>
+                    <button type="button" onClick={() => { setAddSrc(false); setNewSrc(''); setSrcErr('') }}
+                      style={{ padding:'9px 16px', borderRadius:9, fontSize:13, cursor:'pointer', background:'#f3f4f6', border:'none', color:'#6b7280' }}>
+                      취소
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* 지출 */}
-          {type==='expense' && (
+          {/* 지출 섹션 */}
+          {type === 'expense' && (
             <>
+              {/* 지출 구분 */}
               <div>
                 <Label t="지출 구분" />
-                <div className="grid grid-cols-2 gap-2.5">
-                  {(['office','personal'] as const).map(et => (
-                    <button key={et} type="button" onClick={() => { setExpType(et); setCatId('') }}
-                      className="flex items-center justify-center gap-2 py-3.5 rounded-xl text-[14px] font-bold border transition-all"
-                      style={{
-                        background: expType===et ? (et==='office' ? 'var(--office-soft)' : 'var(--personal-soft)') : 'var(--day-card2)',
-                        border: `1px solid ${expType===et ? (et==='office' ? 'var(--office-border)' : 'var(--personal-border)') : 'var(--day-border)'}`,
-                        color: expType===et ? (et==='office' ? 'var(--office)' : 'var(--personal)') : 'var(--day-text3)',
-                        boxShadow: expType===et ? 'var(--day-shadow)' : 'none',
-                      }}>
-                      {et==='office' ? <Building2 size={16}/> : <User size={16}/>}
-                      {et==='office' ? '사무실' : '개인'}
-                    </button>
-                  ))}
-                </div>
+                <Toggle2
+                  value={expType}
+                  onChange={(v) => { setExpType(v); setCatId('') }}
+                  options={[
+                    { key: 'office' as const, label: '사무실', icon: <Building2 size={14}/>,
+                      active: { bg: '#eff6ff', border: '#bfdbfe', color: '#2563eb' } },
+                    { key: 'personal' as const, label: '개인', icon: <User size={14}/>,
+                      active: { bg: '#fff7ed', border: '#fed7aa', color: '#ea580c' } },
+                  ]}
+                />
               </div>
 
+              {/* 고정비 / 변동비 */}
+              <div>
+                <Label t="비용 유형" />
+                <Toggle2
+                  value={fixed ? 'fixed' : 'variable'}
+                  onChange={(v) => setFixed(v === 'fixed')}
+                  options={[
+                    { key: 'variable' as const, label: '변동비', icon: <Zap size={14}/>,
+                      active: { bg: '#eef0fe', border: '#c7c3fa', color: '#4f46e5' } },
+                    { key: 'fixed' as const, label: '고정비', icon: <Lock size={14}/>,
+                      active: { bg: '#f3f4f6', border: '#d1d5db', color: '#374151' } },
+                  ]}
+                />
+                <p style={{ fontSize:11, color:'#9ca3af', marginTop:6 }}>
+                  {fixed ? '매월 반복되는 고정 지출 (임대료, 구독료 등)' : '비정기적인 변동 지출'}
+                </p>
+              </div>
+
+              {/* 카테고리 */}
               <div>
                 <Label t="카테고리" />
                 {!addCat ? (
-                  <div className="flex gap-2">
-                    <select value={catId} onChange={e => setCatId(e.target.value)} style={{ ...F, flex:1 }}
-                      className="focus:border-[var(--primary)]">
+                  <div style={{ display:'flex', gap:8 }}>
+                    <select
+                      value={catId}
+                      onChange={e => setCatId(e.target.value)}
+                      style={{ ...INP, flex:1 }}
+                    >
                       <option value="">선택하세요</option>
                       {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                    <button type="button" onClick={() => setAddCat(true)}
-                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary-border)', color: 'var(--primary-light)' }}>
-                      <Plus size={17}/>
+                    <button
+                      type="button"
+                      onClick={() => { setAddCat(true); setCatErr(''); setTimeout(() => newCatRef.current?.focus(), 50) }}
+                      style={{
+                        width:42, height:42, borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center',
+                        background:'#eef0fe', border:'1.5px solid #c7c3fa', color:'#4f46e5', cursor:'pointer', flexShrink:0,
+                      }}
+                    >
+                      <Plus size={16} />
                     </button>
                   </div>
                 ) : (
-                  <div className="flex gap-2">
-                    <input autoFocus value={newCat} onChange={e => setNewCat(e.target.value)}
-                      placeholder={`새 ${expType==='office'?'사무실':'개인'} 카테고리`}
-                      style={{ ...F, flex:1, borderColor:'var(--primary)' }} onKeyDown={e => e.key==='Enter' && doCat()}/>
-                    <button type="button" onClick={doCat} className="px-4 rounded-xl text-[14px] font-bold"
-                      style={{ background: 'var(--primary)', color: 'white' }}>추가</button>
-                    <button type="button" onClick={() => {setAddCat(false);setNewCat('')}}
-                      className="px-3 rounded-xl text-[13px]"
-                      style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>취소</button>
+                  <div style={{ background:'#f8faff', border:'1.5px solid #c7c3fa', borderRadius:12, padding:14, display:'flex', flexDirection:'column', gap:10 }}>
+                    <p style={{ fontSize:12, fontWeight:800, color:'#4f46e5' }}>
+                      새 {expType === 'office' ? '사무실' : '개인'} 카테고리 추가
+                    </p>
+                    <input
+                      ref={newCatRef}
+                      value={newCat}
+                      onChange={e => setNewCat(e.target.value)}
+                      placeholder={expType === 'office' ? '예: 보관료, 광고비' : '예: 헬스장, 식비'}
+                      style={INP}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); doCat() } }}
+                    />
+                    {catErr && <p style={{ fontSize:12, color:'#dc2626' }}>{catErr}</p>}
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button
+                        type="button"
+                        onClick={() => doCat()}
+                        disabled={!newCat.trim() || catSaving}
+                        style={{
+                          flex:1, padding:'9px', borderRadius:9, fontSize:13, fontWeight:800, cursor:'pointer',
+                          background:'#4f46e5', color:'#fff', border:'none', opacity:(!newCat.trim()||catSaving)?0.5:1,
+                        }}
+                      >
+                        <Check size={13} style={{ display:'inline', marginRight:5 }} />
+                        {catSaving ? '추가 중...' : '추가'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setAddCat(false); setNewCat(''); setCatErr('') }}
+                        style={{ padding:'9px 16px', borderRadius:9, fontSize:13, cursor:'pointer', background:'#f3f4f6', border:'none', color:'#6b7280' }}
+                      >
+                        취소
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-
-              <button type="button" onClick={() => setFixed(!fixed)}
-                className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-[14px] font-bold transition-all"
-                style={{
-                  background: fixed ? 'var(--fixed-soft)' : 'var(--day-card2)',
-                  border: `1px solid ${fixed ? 'var(--fixed-border)' : 'var(--day-border)'}`,
-                  color: fixed ? 'var(--fixed)' : 'var(--day-text3)',
-                }}>
-                {fixed ? <Lock size={16}/> : <Unlock size={16}/>}
-                <span>{fixed ? '고정비 (매달 반복)' : '변동비 (비정기 지출)'}</span>
-                <span className="ml-auto text-[12px] opacity-40">{fixed ? '→ 변동비로' : '→ 고정비로'}</span>
-              </button>
             </>
           )}
 
           {/* 메모 */}
           <div>
-            <Label t="메모" />
-            <textarea value={memo} onChange={e => setMemo(e.target.value)}
-              placeholder="추가 메모 (선택사항)" rows={2}
-              style={{ ...F, resize: 'none' }} className="focus:border-[var(--primary)]" />
+            <Label t="메모 (선택)" />
+            <textarea
+              value={memo}
+              onChange={e => setMemo(e.target.value)}
+              placeholder="추가 메모"
+              rows={2}
+              style={{ ...INP, resize:'none' }}
+            />
           </div>
 
+          {/* 에러 */}
           {error && (
-            <p className="text-[13px] px-4 py-3 rounded-xl"
-              style={{ background: 'var(--expense-soft)', border: '1px solid var(--expense-border)', color: 'var(--expense)' }}>
+            <p style={{ fontSize:13, padding:'10px 14px', borderRadius:10, background:'#fef2f2', border:'1px solid #fca5a5', color:'#dc2626' }}>
               {error}
             </p>
           )}
 
-          <div className="flex gap-3 pt-1 pb-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-4 rounded-2xl text-[15px] font-bold"
-              style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>
+          {/* 저장 버튼 */}
+          <div style={{ display:'flex', gap:10, paddingTop:4 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                flex:1, padding:'13px', borderRadius:12, fontSize:14, fontWeight:800, cursor:'pointer',
+                background:'#f3f4f6', border:'none', color:'#6b7280',
+              }}
+            >
               취소
             </button>
-            <button type="submit" disabled={loading}
-              className={cn('flex-1 py-4 rounded-2xl text-[15px] font-extrabold text-white', loading && 'opacity-60 cursor-not-allowed')}
+            <button
+              type="submit"
+              disabled={saving}
+              className={cn(saving && 'opacity-60')}
               style={{
-                background: type==='income'
-                  ? 'linear-gradient(135deg, #047857, #10b981)'
-                  : 'linear-gradient(135deg, #5046e4, #7c72f0)',
-                boxShadow: type==='income'
-                  ? '0 4px 16px rgba(4,120,87,0.28)'
-                  : '0 4px 16px rgba(80,70,228,0.32)',
-              }}>
-              {loading ? '저장 중...' : '저장하기'}
+                flex:2, padding:'13px', borderRadius:12, fontSize:14, fontWeight:800, cursor:'pointer',
+                color:'#fff', border:'none',
+                background: type === 'income'
+                  ? 'linear-gradient(135deg,#047857,#10b981)'
+                  : 'linear-gradient(135deg,#4f46e5,#7c72f0)',
+              }}
+            >
+              {saving ? '저장 중...' : '저장하기'}
             </button>
           </div>
         </form>

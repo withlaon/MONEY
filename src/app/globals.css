@@ -51,7 +51,7 @@
 
   --nav-h:     60px;
   --sidebar-w: 240px;
-  --content-px: clamp(20px, 4vw, 52px);
+  --content-px: clamp(10px, 2vw, 26px);
   --content-py: clamp(20px, 3vh, 36px);
 }
 
