@@ -55,7 +55,7 @@
   --fixed-border: rgba(100,116,139,0.16);
 
   --nav-h:     62px;
-  --sidebar-w: 228px;
+  --sidebar-w: 240px;
   /* 본문 최대 너비 & 여백 */
   --content-max: 1400px;
   --content-px:  clamp(24px, 4vw, 56px);

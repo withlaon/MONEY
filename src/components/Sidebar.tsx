@@ -51,7 +51,7 @@ export function DesktopSidebar() {
       </div>
 
       {/* 메뉴 */}
-      <nav className="flex-1 py-4 px-3 space-y-1">
+      <nav className="flex-1 py-5 px-4 space-y-2.5">
         {navItems.map(item => {
           const Icon = item.icon
           const active = path === item.href || (item.href !== '/' && path.startsWith(item.href))
@@ -59,11 +59,13 @@ export function DesktopSidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className="group flex items-center gap-3.5 px-3.5 py-3 rounded-2xl transition-all duration-150"
+              className="group flex items-center gap-3.5 rounded-2xl transition-all duration-150"
               style={{
+                padding: '10px 14px',
                 background: active ? 'rgba(124,111,224,0.14)' : 'transparent',
                 border: `1px solid ${active ? 'rgba(124,111,224,0.28)' : 'transparent'}`,
                 color: active ? '#a99ff8' : 'var(--night-text2)',
+                overflow: 'visible',
               }}
             >
               <div
@@ -75,14 +77,16 @@ export function DesktopSidebar() {
               >
                 <Icon size={17} />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-semibold leading-tight">{item.label}</p>
-                <p className="text-[11px] mt-0.5" style={{ color: active ? 'rgba(169,159,248,0.6)' : 'var(--night-text3)' }}>
+              <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'visible' }}>
+                <p className="text-[14px] font-bold leading-snug whitespace-nowrap" style={{ overflow: 'visible' }}>
+                  {item.label}
+                </p>
+                <p className="text-[11px] mt-0.5 whitespace-nowrap" style={{ color: active ? 'rgba(169,159,248,0.6)' : 'var(--night-text3)', overflow: 'visible' }}>
                   {item.sub}
                 </p>
               </div>
               {active && (
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#a99ff8' }} />
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#a99ff8' }} />
               )}
             </Link>
           )
