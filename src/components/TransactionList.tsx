@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Trash2, TrendingUp, TrendingDown, Building2, User, Lock, ChevronDown } from 'lucide-react'
+import { Trash2, TrendingUp, Building2, User, Lock, ChevronDown, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { Transaction } from '@/lib/supabase'
 
@@ -17,147 +17,184 @@ export default function TransactionList({ transactions, onDelete }: TransactionL
   const handleDelete = async (id: string) => {
     if (!confirm('이 거래 내역을 삭제하시겠습니까?')) return
     setDeletingId(id)
-    try {
-      await onDelete(id)
-    } finally {
-      setDeletingId(null)
-    }
+    try { await onDelete(id) }
+    finally { setDeletingId(null) }
   }
 
   if (transactions.length === 0) {
     return (
-      <div className="text-center py-16 text-[#3d4168]">
-        <div className="w-16 h-16 rounded-2xl bg-[#1a1d27] border border-[#252836] flex items-center justify-center mx-auto mb-4">
-          <TrendingUp className="w-7 h-7 opacity-30" />
+      <div className="text-center py-14">
+        <div
+          className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+        >
+          <TrendingUp size={22} style={{ color: 'var(--text-muted)', opacity: 0.4 }} />
         </div>
-        <p className="text-sm font-medium text-[#6b7280]">거래 내역이 없습니다</p>
-        <p className="text-xs text-[#3d4168] mt-1">상단의 버튼으로 거래를 추가하세요</p>
+        <p className="text-[14px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+          거래 내역이 없습니다
+        </p>
+        <p className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>
+          상단 버튼으로 거래를 추가하세요
+        </p>
       </div>
     )
   }
 
-  // 날짜별 그룹
   const grouped = transactions.reduce((acc, t) => {
-    const date = t.transaction_date
-    if (!acc[date]) acc[date] = []
-    acc[date].push(t)
+    if (!acc[t.transaction_date]) acc[t.transaction_date] = []
+    acc[t.transaction_date].push(t)
     return acc
   }, {} as Record<string, Transaction[]>)
 
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a))
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {sortedDates.map(date => {
-        const dayTransactions = grouped[date]
-        const dayIncome = dayTransactions.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0)
-        const dayExpense = dayTransactions.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0)
+        const items = grouped[date]
+        const dayIncome  = items.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0)
+        const dayExpense = items.filter(t => t.transaction_type === 'expense').reduce((s, t) => s + t.amount, 0)
 
         return (
-          <div key={date} className="space-y-1">
+          <div key={date}>
             {/* 날짜 헤더 */}
-            <div className="flex items-center justify-between px-1 py-1.5">
-              <span className="text-xs font-semibold text-[#6b7280]">{formatDate(date)}</span>
-              <div className="flex items-center gap-3 text-xs">
-                {dayIncome > 0 && <span className="text-emerald-400">+{formatCurrency(dayIncome)}</span>}
-                {dayExpense > 0 && <span className="text-red-400">-{formatCurrency(dayExpense)}</span>}
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-[12px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                {formatDate(date)}
+              </span>
+              <div className="flex items-center gap-3">
+                {dayIncome > 0 && (
+                  <span className="text-[12px] font-medium flex items-center gap-0.5" style={{ color: '#10b981' }}>
+                    <ArrowUpRight size={12} />
+                    {formatCurrency(dayIncome)}
+                  </span>
+                )}
+                {dayExpense > 0 && (
+                  <span className="text-[12px] font-medium flex items-center gap-0.5" style={{ color: '#f43f5e' }}>
+                    <ArrowDownRight size={12} />
+                    {formatCurrency(dayExpense)}
+                  </span>
+                )}
               </div>
             </div>
 
-            {dayTransactions.map(t => (
-              <div
-                key={t.id}
-                className={cn(
-                  'bg-[#1a1d27] border rounded-xl overflow-hidden transition-all',
-                  expandedId === t.id ? 'border-[#6c63ff50]' : 'border-[#252836]'
-                )}
-              >
-                <div
-                  className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-                  onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
-                >
-                  {/* 타입 아이콘 */}
-                  <div className={cn(
-                    'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
-                    t.transaction_type === 'income'
-                      ? 'bg-emerald-500/20 text-emerald-400'
-                      : t.expense_type === 'office'
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-orange-500/20 text-orange-400'
-                  )}>
-                    {t.transaction_type === 'income'
-                      ? <TrendingUp className="w-4 h-4" />
-                      : t.expense_type === 'office'
-                        ? <Building2 className="w-4 h-4" />
-                        : <User className="w-4 h-4" />
-                    }
-                  </div>
+            {/* 항목 목록 */}
+            <div className="space-y-1.5">
+              {items.map(t => {
+                const isIncome = t.transaction_type === 'income'
+                const isExpanded = expandedId === t.id
 
-                  {/* 내용 */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white truncate">
-                        {t.description || (t.transaction_type === 'income'
-                          ? (t.income_sources?.name || '수입')
-                          : (t.expense_categories?.name || '지출'))}
-                      </p>
-                      {t.is_fixed && (
-                        <span className="flex-shrink-0 flex items-center gap-1 text-[10px] text-slate-400 bg-slate-500/20 px-1.5 py-0.5 rounded-md">
-                          <Lock className="w-2.5 h-2.5" />고정
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#6b7280] mt-0.5">
-                      {t.transaction_type === 'income'
-                        ? (t.income_sources?.name || '—')
-                        : `${t.expense_type === 'office' ? '사무실' : '개인'} · ${t.expense_categories?.name || '—'}`
-                      }
-                    </p>
-                  </div>
+                const iconColor = isIncome ? '#10b981' : t.expense_type === 'office' ? '#3b82f6' : '#f97316'
+                const iconBg    = isIncome ? 'rgba(16,185,129,0.1)' : t.expense_type === 'office' ? 'rgba(59,130,246,0.1)' : 'rgba(249,115,22,0.1)'
+                const IconEl    = isIncome ? TrendingUp : t.expense_type === 'office' ? Building2 : User
 
-                  {/* 금액 */}
-                  <div className="text-right flex-shrink-0">
-                    <p className={cn(
-                      'text-sm font-bold',
-                      t.transaction_type === 'income' ? 'text-emerald-400' : 'text-red-400'
-                    )}>
-                      {t.transaction_type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                    </p>
-                  </div>
+                return (
+                  <div
+                    key={t.id}
+                    className="rounded-xl overflow-hidden transition-all duration-200"
+                    style={{
+                      background: isExpanded ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                      border: `1px solid ${isExpanded ? 'var(--border-light)' : 'var(--border)'}`,
+                    }}
+                  >
+                    <div
+                      className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                      onClick={() => setExpandedId(isExpanded ? null : t.id)}
+                    >
+                      {/* 아이콘 */}
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: iconBg, color: iconColor }}
+                      >
+                        <IconEl size={15} />
+                      </div>
 
-                  <ChevronDown className={cn(
-                    'w-4 h-4 text-[#3d4168] transition-transform flex-shrink-0',
-                    expandedId === t.id && 'rotate-180'
-                  )} />
-                </div>
-
-                {/* 확장 내용 */}
-                {expandedId === t.id && (
-                  <div className="px-4 pb-3 border-t border-[#252836] pt-3 slide-in">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1 flex-1">
-                        {t.memo && (
-                          <p className="text-xs text-[#6b7280]">
-                            <span className="text-[#4d5570]">메모: </span>{t.memo}
+                      {/* 내용 */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[13px] font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                            {t.description || (isIncome
+                              ? (t.income_sources?.name || '수입')
+                              : (t.expense_categories?.name || '지출')
+                            )}
                           </p>
-                        )}
-                        <p className="text-xs text-[#4d5570]">
-                          등록: {new Date(t.created_at).toLocaleDateString('ko-KR')}
+                          {t.is_fixed && (
+                            <span
+                              className="flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md flex-shrink-0"
+                              style={{ background: 'rgba(148,163,184,0.1)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.15)' }}
+                            >
+                              <Lock size={9} />고정
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                          {isIncome
+                            ? (t.income_sources?.name || '—')
+                            : `${t.expense_type === 'office' ? '사무실' : '개인'} · ${t.expense_categories?.name || '—'}`
+                          }
                         </p>
                       </div>
-                      <button
-                        onClick={() => handleDelete(t.id)}
-                        disabled={deletingId === t.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        삭제
-                      </button>
+
+                      {/* 금액 + 화살표 */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <p
+                          className="text-[14px] font-bold"
+                          style={{ color: isIncome ? '#10b981' : '#f43f5e' }}
+                        >
+                          {isIncome ? '+' : '-'}{formatCurrency(t.amount)}
+                        </p>
+                        <ChevronDown
+                          size={14}
+                          style={{
+                            color: 'var(--text-muted)',
+                            transform: isExpanded ? 'rotate(180deg)' : 'none',
+                            transition: 'transform 0.2s ease',
+                          }}
+                        />
+                      </div>
                     </div>
+
+                    {/* 확장 패널 */}
+                    {isExpanded && (
+                      <div
+                        className="px-4 pb-3 pt-2 fade-in"
+                        style={{ borderTop: '1px solid var(--border)' }}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1">
+                            {t.memo && (
+                              <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>메모 · </span>
+                                {t.memo}
+                              </p>
+                            )}
+                            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                              등록일 · {new Date(t.created_at).toLocaleDateString('ko-KR')}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDelete(t.id)}
+                            disabled={deletingId === t.id}
+                            className={cn(
+                              'flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all',
+                              deletingId === t.id ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                            )}
+                            style={{
+                              background: 'rgba(244,63,94,0.08)',
+                              border: '1px solid rgba(244,63,94,0.2)',
+                              color: '#f43f5e',
+                            }}
+                          >
+                            <Trash2 size={12} />
+                            {deletingId === t.id ? '삭제 중' : '삭제'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                )
+              })}
+            </div>
           </div>
         )
       })}

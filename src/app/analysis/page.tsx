@@ -5,155 +5,122 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend
 } from 'recharts'
-import { TrendingUp, TrendingDown, AlertCircle, Lightbulb, Target, ChevronRight } from 'lucide-react'
+import { TrendingUp, AlertCircle, Lightbulb, Target, ChevronRight, ArrowDownRight } from 'lucide-react'
 import { useMonthlyStats } from '@/hooks/useTransactions'
-import { getCurrentYearMonth, getPreviousMonths, formatCurrency, getMonthName } from '@/lib/utils'
+import { getCurrentYearMonth, getPreviousMonths, formatCurrency } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { MonthlyStats } from '@/lib/supabase'
 
-const COLORS = ['#6c63ff', '#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#ec4899']
+const PIE_COLORS = ['#7b6fe0', '#10b981', '#f43f5e', '#3b82f6', '#f97316', '#ec4899']
 
-function generateCoaching(stats: MonthlyStats[], currentStats: MonthlyStats | undefined) {
+function generateCoaching(stats: MonthlyStats[], cur?: MonthlyStats) {
   const tips: { type: 'good' | 'warn' | 'tip'; text: string }[] = []
-  if (!currentStats || currentStats.totalIncome === 0) {
-    tips.push({ type: 'tip', text: '이번 달 거래 내역을 입력하면 코칭을 받을 수 있어요.' })
+  if (!cur || cur.totalIncome === 0) {
+    tips.push({ type: 'tip', text: '이번 달 거래 내역을 입력하면 맞춤 코칭을 받을 수 있어요.' })
     return tips
   }
+  const rate = cur.balance / cur.totalIncome
+  if (rate >= 0.3)       tips.push({ type: 'good', text: `수익률 ${(rate*100).toFixed(1)}%로 우수합니다. 이 추세를 유지하세요!` })
+  else if (rate >= 0.1)  tips.push({ type: 'warn', text: `수익률 ${(rate*100).toFixed(1)}%. 지출 절감으로 30% 이상을 목표로 해보세요.` })
+  else if (rate < 0)     tips.push({ type: 'warn', text: '지출이 수입을 초과했습니다. 지출 구조를 점검하세요.' })
 
-  const profitRate = currentStats.totalIncome > 0 ? currentStats.balance / currentStats.totalIncome : 0
-
-  if (profitRate >= 0.3) {
-    tips.push({ type: 'good', text: `수익률 ${(profitRate * 100).toFixed(1)}%로 양호합니다. 꾸준히 유지하세요!` })
-  } else if (profitRate >= 0.1) {
-    tips.push({ type: 'warn', text: `수익률이 ${(profitRate * 100).toFixed(1)}%입니다. 지출을 조금 더 줄여보세요.` })
-  } else if (profitRate < 0) {
-    tips.push({ type: 'warn', text: `이번 달 지출이 수입을 초과했습니다. 수입 대비 지출을 점검하세요.` })
+  if (cur.totalExpense > 0) {
+    const fixR = cur.fixedExpense / cur.totalExpense
+    if (fixR > 0.6) tips.push({ type: 'warn', text: `고정비가 지출의 ${(fixR*100).toFixed(0)}%입니다. 고정비 절감을 검토해보세요.` })
+    const perR = cur.personalExpense / cur.totalExpense
+    if (perR > 0.4) tips.push({ type: 'tip', text: `개인 지출이 ${(perR*100).toFixed(0)}%입니다. 사업비와 개인비를 명확히 분리하면 절세에 유리해요.` })
   }
-
-  if (currentStats.totalExpense > 0) {
-    const fixedRatio = currentStats.fixedExpense / currentStats.totalExpense
-    if (fixedRatio > 0.6) {
-      tips.push({ type: 'warn', text: `고정비가 전체 지출의 ${(fixedRatio * 100).toFixed(0)}%를 차지합니다. 고정비 절감을 검토해보세요.` })
-    }
-    const personalRatio = currentStats.personalExpense / currentStats.totalExpense
-    if (personalRatio > 0.4) {
-      tips.push({ type: 'tip', text: `개인 지출이 전체의 ${(personalRatio * 100).toFixed(0)}%입니다. 사업 비용과 개인 지출을 명확히 구분하면 절세에 도움돼요.` })
-    }
-  }
-
   if (stats.length >= 3) {
-    const recentIncome = stats.slice(-3).map(s => s.totalIncome)
-    const isIncomeGrowing = recentIncome.every((val, i) => i === 0 || val >= recentIncome[i - 1])
-    if (isIncomeGrowing) {
-      tips.push({ type: 'good', text: '최근 3개월 수입이 꾸준히 증가하고 있어요. 좋은 추세입니다!' })
-    }
+    const inc = stats.slice(-3).map(s => s.totalIncome)
+    if (inc.every((v,i) => i===0 || v >= inc[i-1]))
+      tips.push({ type: 'good', text: '최근 3개월 수입이 꾸준히 성장 중입니다!' })
   }
-
-  tips.push({ type: 'tip', text: '매달 수입의 20-30%를 저축/비상금으로 적립하는 것을 권장합니다.' })
+  tips.push({ type: 'tip', text: '수입의 20~30%를 저축/비상금으로 적립하는 습관을 추천합니다.' })
   return tips
 }
 
-function predictNextMonth(stats: MonthlyStats[]): { income: number; expense: number; balance: number } {
-  if (stats.length === 0) return { income: 0, expense: 0, balance: 0 }
-  if (stats.length === 1) return {
-    income: stats[0].totalIncome,
-    expense: stats[0].totalExpense,
-    balance: stats[0].balance
+function predictNext(stats: MonthlyStats[]) {
+  if (!stats.length) return { income: 0, expense: 0, balance: 0 }
+  const r = stats.slice(-3)
+  const avgI = r.reduce((s,m) => s+m.totalIncome, 0) / r.length
+  const avgE = r.reduce((s,m) => s+m.totalExpense, 0) / r.length
+  if (r.length >= 2) {
+    const gi = (r[r.length-1].totalIncome  - r[0].totalIncome)  / (r.length-1)
+    const ge = (r[r.length-1].totalExpense - r[0].totalExpense) / (r.length-1)
+    const pi = Math.max(0, avgI + gi*0.5)
+    const pe = Math.max(0, avgE + ge*0.5)
+    return { income: Math.round(pi), expense: Math.round(pe), balance: Math.round(pi-pe) }
   }
-
-  const recent = stats.slice(-3)
-  const avgIncome = recent.reduce((s, m) => s + m.totalIncome, 0) / recent.length
-  const avgExpense = recent.reduce((s, m) => s + m.totalExpense, 0) / recent.length
-
-  // 추세 반영
-  if (recent.length >= 2) {
-    const incomeGrowth = (recent[recent.length - 1].totalIncome - recent[0].totalIncome) / (recent.length - 1)
-    const expenseGrowth = (recent[recent.length - 1].totalExpense - recent[0].totalExpense) / (recent.length - 1)
-    const predictedIncome = Math.max(0, avgIncome + incomeGrowth * 0.5)
-    const predictedExpense = Math.max(0, avgExpense + expenseGrowth * 0.5)
-    return {
-      income: Math.round(predictedIncome),
-      expense: Math.round(predictedExpense),
-      balance: Math.round(predictedIncome - predictedExpense)
-    }
-  }
-
-  return {
-    income: Math.round(avgIncome),
-    expense: Math.round(avgExpense),
-    balance: Math.round(avgIncome - avgExpense)
-  }
+  return { income: Math.round(avgI), expense: Math.round(avgE), balance: Math.round(avgI-avgE) }
 }
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-[#13151f] border border-[#252836] rounded-xl p-3 shadow-xl">
-        <p className="text-xs text-[#6b7280] mb-2">{label}</p>
-        {payload.map((entry, i) => (
-          <p key={i} className="text-xs font-medium" style={{ color: entry.color }}>
-            {entry.name}: {formatCurrency(entry.value)}
-          </p>
-        ))}
-      </div>
-    )
-  }
-  return null
+const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{name:string;value:number;color:string}>; label?: string }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-xl p-3 text-[12px] shadow-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-light)' }}>
+      <p className="font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>{label}</p>
+      {payload.map((e,i) => (
+        <p key={i} className="font-medium" style={{ color: e.color }}>{e.name}: {formatCurrency(e.value)}</p>
+      ))}
+    </div>
+  )
 }
 
 export default function AnalysisPage() {
   const { year, month } = getCurrentYearMonth()
   const [monthCount, setMonthCount] = useState(6)
-
   const months = useMemo(() => getPreviousMonths(year, month, monthCount), [year, month, monthCount])
   const { stats, loading } = useMonthlyStats(months)
 
-  const currentStats = stats[stats.length - 1]
-  const predictions = predictNextMonth(stats)
-  const coaching = generateCoaching(stats, currentStats)
+  const cur = stats[stats.length-1]
+  const pred = predictNext(stats)
+  const coaching = generateCoaching(stats, cur)
+  const nextMonth = month===12 ? 1 : month+1
+  const nextYear  = month===12 ? year+1 : year
 
   const chartData = stats.map(s => ({
     name: `${s.month}월`,
     수입: s.totalIncome,
     지출: s.totalExpense,
     잔액: s.balance,
-    사무실지출: s.officeExpense,
-    개인지출: s.personalExpense,
+    사무실: s.officeExpense,
+    개인: s.personalExpense,
   }))
 
-  const nextMonth = month === 12 ? 1 : month + 1
-  const nextYear = month === 12 ? year + 1 : year
-
-  const pieData = currentStats ? [
-    { name: '사무실 지출', value: currentStats.officeExpense },
-    { name: '개인 지출', value: currentStats.personalExpense },
+  const pieData = cur ? [
+    { name: '사무실', value: cur.officeExpense },
+    { name: '개인', value: cur.personalExpense },
   ].filter(d => d.value > 0) : []
 
-  const fixedVarData = currentStats ? [
-    { name: '고정비', value: currentStats.fixedExpense },
-    { name: '변동비', value: currentStats.variableExpense },
+  const fixedData = cur ? [
+    { name: '고정비', value: cur.fixedExpense },
+    { name: '변동비', value: cur.variableExpense },
   ].filter(d => d.value > 0) : []
+
+  const axisStyle = { fill: 'var(--text-muted)', fontSize: 11 }
+  const gridStyle = { stroke: 'var(--border)', strokeDasharray: '4 4' }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="min-h-full p-5 sm:p-7 max-w-[1280px] mx-auto space-y-5">
+
       {/* 헤더 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 fade-up">
         <div>
-          <h1 className="text-2xl font-bold text-white">분석 / 비교</h1>
-          <p className="text-sm text-[#6b7280] mt-0.5">월별 수입·지출 추이 분석</p>
+          <h1 className="text-[22px] font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>분석 / 비교</h1>
+          <p className="text-[13px] mt-0.5" style={{ color: 'var(--text-muted)' }}>월별 수입·지출 추이 분석</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-[#6b7280]">기간:</span>
-          {[3, 6, 12].map(n => (
+          <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>분석 기간</span>
+          {[3,6,12].map(n => (
             <button
               key={n}
               onClick={() => setMonthCount(n)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
-                monthCount === n
-                  ? 'bg-[#6c63ff20] text-[#8b84ff] border-[#6c63ff30]'
-                  : 'bg-[#1a1d27] text-[#6b7280] border-[#252836] hover:text-white'
-              )}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all"
+              style={{
+                background: monthCount===n ? 'rgba(123,111,224,0.12)' : 'var(--bg-card)',
+                border: `1px solid ${monthCount===n ? 'rgba(123,111,224,0.3)' : 'var(--border)'}`,
+                color: monthCount===n ? 'var(--primary-light)' : 'var(--text-muted)',
+              }}
             >
               {n}개월
             </button>
@@ -163,150 +130,157 @@ export default function AnalysisPage() {
 
       {loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-64 bg-[#1a1d27] rounded-2xl animate-pulse" />
+          {Array.from({length:4}).map((_,i) => (
+            <div key={i} className="h-64 rounded-2xl animate-pulse" style={{ background: 'var(--bg-card)' }} />
           ))}
         </div>
       ) : (
         <>
           {/* 수입/지출 막대 차트 */}
-          <div className="bg-[#13151f] border border-[#1e2130] rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-white mb-4">월별 수입 · 지출</h2>
+          <div className="rounded-2xl p-5 fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <p className="text-[14px] font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>월별 수입 · 지출</p>
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={chartData} barGap={4} barCategoryGap="30%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2130" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(0)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '12px', color: '#6b7280' }} />
-                <Bar dataKey="수입" fill="#22c55e" radius={[4, 4, 0, 0]} opacity={0.85} />
-                <Bar dataKey="지출" fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.85} />
+              <BarChart data={chartData} barGap={4} barCategoryGap="32%">
+                <CartesianGrid vertical={false} {...gridStyle} />
+                <XAxis dataKey="name" tick={axisStyle} axisLine={false} tickLine={false} />
+                <YAxis tick={axisStyle} axisLine={false} tickLine={false}
+                  tickFormatter={v => v>=1000000 ? `${(v/1000000).toFixed(0)}M` : v>=1000 ? `${(v/1000).toFixed(0)}K` : `${v}`} />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend wrapperStyle={{ fontSize:'12px', color:'var(--text-muted)' }} />
+                <Bar dataKey="수입" fill="#10b981" radius={[5,5,0,0]} opacity={0.85} />
+                <Bar dataKey="지출" fill="#f43f5e" radius={[5,5,0,0]} opacity={0.85} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* 잔액 추이 라인 차트 */}
-          <div className="bg-[#13151f] border border-[#1e2130] rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-white mb-4">순수익(잔액) 추이</h2>
+          {/* 잔액 라인 차트 */}
+          <div className="rounded-2xl p-5 fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <p className="text-[14px] font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>순수익 추이</p>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2130" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(0)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Line type="monotone" dataKey="잔액" stroke="#6c63ff" strokeWidth={2.5} dot={{ fill: '#6c63ff', r: 4 }} activeDot={{ r: 6 }} />
+                <CartesianGrid vertical={false} {...gridStyle} />
+                <XAxis dataKey="name" tick={axisStyle} axisLine={false} tickLine={false} />
+                <YAxis tick={axisStyle} axisLine={false} tickLine={false}
+                  tickFormatter={v => v>=1000000 ? `${(v/1000000).toFixed(0)}M` : v>=1000 ? `${(v/1000).toFixed(0)}K` : `${v}`} />
+                <Tooltip content={<ChartTooltip />} />
+                <Line type="monotone" dataKey="잔액" stroke="var(--primary-light)" strokeWidth={2.5}
+                  dot={{ fill:'var(--primary-light)', r:4, strokeWidth:0 }}
+                  activeDot={{ r:6, fill:'var(--primary-light)' }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
+          {/* 파이 차트 2개 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* 지출 구성 파이차트 */}
-            {currentStats && pieData.length > 0 && (
-              <div className="bg-[#13151f] border border-[#1e2130] rounded-2xl p-5">
-                <h2 className="text-sm font-semibold text-white mb-4">
+            {pieData.length > 0 && (
+              <div className="rounded-2xl p-5 fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                <p className="text-[14px] font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
                   {year}년 {month}월 지출 구성
-                </h2>
+                </p>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
-                      {pieData.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} opacity={0.85} />
-                      ))}
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={52} outerRadius={80} paddingAngle={4} dataKey="value">
+                      {pieData.map((_,i) => <Cell key={i} fill={PIE_COLORS[i]} opacity={0.88} />)}
                     </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                    <Legend wrapperStyle={{ fontSize: '12px', color: '#6b7280' }} />
+                    <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+                    <Legend wrapperStyle={{ fontSize:'12px', color:'var(--text-muted)' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             )}
-
-            {/* 고정비/변동비 */}
-            {currentStats && fixedVarData.length > 0 && (
-              <div className="bg-[#13151f] border border-[#1e2130] rounded-2xl p-5">
-                <h2 className="text-sm font-semibold text-white mb-4">
+            {fixedData.length > 0 && (
+              <div className="rounded-2xl p-5 fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                <p className="text-[14px] font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
                   {year}년 {month}월 고정비 · 변동비
-                </h2>
+                </p>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
-                    <Pie data={fixedVarData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
-                      <Cell fill="#6c63ff" opacity={0.85} />
-                      <Cell fill="#f59e0b" opacity={0.85} />
+                    <Pie data={fixedData} cx="50%" cy="50%" innerRadius={52} outerRadius={80} paddingAngle={4} dataKey="value">
+                      <Cell fill="var(--primary)" opacity={0.88} />
+                      <Cell fill="#f59e0b" opacity={0.88} />
                     </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                    <Legend wrapperStyle={{ fontSize: '12px', color: '#6b7280' }} />
+                    <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+                    <Legend wrapperStyle={{ fontSize:'12px', color:'var(--text-muted)' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             )}
           </div>
 
-          {/* 사무실 vs 개인 지출 비교 */}
-          <div className="bg-[#13151f] border border-[#1e2130] rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-white mb-4">사무실 vs 개인 지출 비교</h2>
+          {/* 사무실 vs 개인 */}
+          <div className="rounded-2xl p-5 fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <p className="text-[14px] font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>사무실 vs 개인 지출 비교</p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} barGap={4} barCategoryGap="30%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2130" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(0)}M` : `${(v / 1000).toFixed(0)}K`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '12px', color: '#6b7280' }} />
-                <Bar dataKey="사무실지출" fill="#3b82f6" radius={[4, 4, 0, 0]} opacity={0.85} />
-                <Bar dataKey="개인지출" fill="#f97316" radius={[4, 4, 0, 0]} opacity={0.85} />
+              <BarChart data={chartData} barGap={4} barCategoryGap="32%">
+                <CartesianGrid vertical={false} {...gridStyle} />
+                <XAxis dataKey="name" tick={axisStyle} axisLine={false} tickLine={false} />
+                <YAxis tick={axisStyle} axisLine={false} tickLine={false}
+                  tickFormatter={v => v>=1000000 ? `${(v/1000000).toFixed(0)}M` : `${(v/1000).toFixed(0)}K`} />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend wrapperStyle={{ fontSize:'12px', color:'var(--text-muted)' }} />
+                <Bar dataKey="사무실" fill="#3b82f6" radius={[5,5,0,0]} opacity={0.85} />
+                <Bar dataKey="개인"   fill="#f97316" radius={[5,5,0,0]} opacity={0.85} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* 다음 달 예측 */}
-          <div className="bg-gradient-to-r from-[#6c63ff15] to-[#4f46e510] border border-[#6c63ff20] rounded-2xl p-5">
+          {/* 예측 */}
+          <div
+            className="rounded-2xl p-5 fade-up"
+            style={{ background: 'linear-gradient(135deg, rgba(123,111,224,0.08), rgba(59,130,246,0.04))', border: '1px solid rgba(123,111,224,0.2)' }}
+          >
             <div className="flex items-center gap-2 mb-4">
-              <Target className="w-5 h-5 text-[#6c63ff]" />
-              <h2 className="text-sm font-semibold text-white">{nextYear}년 {nextMonth}월 예측</h2>
-              <span className="text-xs text-[#6b7280] ml-auto">최근 {Math.min(3, stats.length)}개월 추세 기반</span>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-[#0f1117] rounded-xl p-4">
-                <p className="text-xs text-[#6b7280] mb-1">예상 수입</p>
-                <p className="text-lg font-bold text-emerald-400">{formatCurrency(predictions.income)}</p>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,111,224,0.15)' }}>
+                <Target size={15} style={{ color: 'var(--primary-light)' }} />
               </div>
-              <div className="bg-[#0f1117] rounded-xl p-4">
-                <p className="text-xs text-[#6b7280] mb-1">예상 지출</p>
-                <p className="text-lg font-bold text-red-400">{formatCurrency(predictions.expense)}</p>
-              </div>
-              <div className="bg-[#0f1117] rounded-xl p-4">
-                <p className="text-xs text-[#6b7280] mb-1">예상 잔액</p>
-                <p className={cn('text-lg font-bold', predictions.balance >= 0 ? 'text-violet-400' : 'text-red-400')}>
-                  {formatCurrency(predictions.balance)}
+              <div>
+                <p className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {nextYear}년 {nextMonth}월 예측
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  최근 {Math.min(3, stats.length)}개월 추세 기반
                 </p>
               </div>
             </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: '예상 수입', value: pred.income,  color: '#10b981' },
+                { label: '예상 지출', value: pred.expense, color: '#f43f5e' },
+                { label: '예상 잔액', value: pred.balance, color: pred.balance >= 0 ? '#a78bfa' : '#f43f5e' },
+              ].map(c => (
+                <div key={c.label} className="rounded-xl p-4" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+                  <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>{c.label}</p>
+                  <p className="text-[15px] font-bold" style={{ color: c.color }}>{formatCurrency(c.value)}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* AI 코칭 */}
-          <div className="bg-[#13151f] border border-[#1e2130] rounded-2xl p-5">
+          {/* 코칭 */}
+          <div className="rounded-2xl p-5 fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
             <div className="flex items-center gap-2 mb-4">
-              <Lightbulb className="w-5 h-5 text-[#f59e0b]" />
-              <h2 className="text-sm font-semibold text-white">재무 코칭</h2>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.15)' }}>
+                <Lightbulb size={15} style={{ color: '#f59e0b' }} />
+              </div>
+              <p className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>재무 코칭</p>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {coaching.map((tip, i) => (
                 <div
                   key={i}
-                  className={cn(
-                    'flex items-start gap-3 p-3 rounded-xl',
-                    tip.type === 'good' ? 'bg-emerald-500/10 border border-emerald-500/20' :
-                    tip.type === 'warn' ? 'bg-amber-500/10 border border-amber-500/20' :
-                    'bg-[#1a1d27] border border-[#252836]'
-                  )}
+                  className="flex items-start gap-3 p-3.5 rounded-xl"
+                  style={{
+                    background: tip.type==='good' ? 'rgba(16,185,129,0.07)'  : tip.type==='warn' ? 'rgba(245,158,11,0.07)' : 'var(--bg-elevated)',
+                    border: `1px solid ${tip.type==='good' ? 'rgba(16,185,129,0.18)' : tip.type==='warn' ? 'rgba(245,158,11,0.18)' : 'var(--border)'}`,
+                  }}
                 >
-                  {tip.type === 'good' ? <TrendingUp className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" /> :
-                   tip.type === 'warn' ? <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" /> :
-                   <ChevronRight className="w-4 h-4 text-[#6c63ff] flex-shrink-0 mt-0.5" />}
-                  <p className={cn(
-                    'text-sm',
-                    tip.type === 'good' ? 'text-emerald-300' :
-                    tip.type === 'warn' ? 'text-amber-300' :
-                    'text-[#a0a8c0]'
-                  )}>
+                  {tip.type==='good'
+                    ? <TrendingUp size={14} style={{ color:'#10b981', flexShrink:0, marginTop:2 }} />
+                    : tip.type==='warn'
+                    ? <AlertCircle size={14} style={{ color:'#f59e0b', flexShrink:0, marginTop:2 }} />
+                    : <ChevronRight size={14} style={{ color:'var(--primary-light)', flexShrink:0, marginTop:2 }} />
+                  }
+                  <p className="text-[13px] leading-relaxed" style={{ color: tip.type==='good' ? '#6ee7b7' : tip.type==='warn' ? '#fcd34d' : 'var(--text-secondary)' }}>
                     {tip.text}
                   </p>
                 </div>
@@ -315,41 +289,64 @@ export default function AnalysisPage() {
           </div>
 
           {/* 월별 비교표 */}
-          <div className="bg-[#13151f] border border-[#1e2130] rounded-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#1e2130]">
-              <h2 className="text-sm font-semibold text-white">월별 상세 비교</h2>
+          <div className="rounded-2xl overflow-hidden fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <p className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>월별 상세 비교</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full">
                 <thead>
-                  <tr className="border-b border-[#1e2130]">
-                    <th className="text-left px-5 py-3 text-xs text-[#6b7280] font-medium">기간</th>
-                    <th className="text-right px-4 py-3 text-xs text-[#6b7280] font-medium">수입</th>
-                    <th className="text-right px-4 py-3 text-xs text-[#6b7280] font-medium">지출</th>
-                    <th className="text-right px-4 py-3 text-xs text-[#6b7280] font-medium">잔액</th>
-                    <th className="text-right px-4 py-3 text-xs text-[#6b7280] font-medium">수익률</th>
-                    <th className="text-right px-5 py-3 text-xs text-[#6b7280] font-medium">고정비</th>
+                  <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+                    {['기간','수입','지출','잔액','수익률','고정비'].map(h => (
+                      <th key={h} className={cn('py-3 text-[11px] font-semibold', h==='기간' ? 'text-left px-5' : 'text-right px-4')} style={{ color: 'var(--text-muted)' }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[...stats].reverse().map((s, i) => (
-                    <tr key={i} className={cn(
-                      'border-b border-[#1e2130] last:border-0',
-                      i === 0 && 'bg-[#6c63ff08]'
-                    )}>
-                      <td className="px-5 py-3 text-white font-medium">
-                        {s.year}년 {s.month}월
-                        {i === 0 && <span className="ml-2 text-[10px] text-[#6c63ff] bg-[#6c63ff20] px-1.5 py-0.5 rounded">이번달</span>}
+                    <tr
+                      key={i}
+                      style={{
+                        borderBottom: i < stats.length-1 ? '1px solid var(--border)' : 'none',
+                        background: i===0 ? 'rgba(123,111,224,0.04)' : 'transparent',
+                      }}
+                    >
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                            {s.year}년 {s.month}월
+                          </span>
+                          {i===0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(123,111,224,0.15)', color: 'var(--primary-light)' }}>
+                              이번달
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-emerald-400">{formatCurrency(s.totalIncome)}</td>
-                      <td className="px-4 py-3 text-right text-red-400">{formatCurrency(s.totalExpense)}</td>
-                      <td className={cn('px-4 py-3 text-right font-medium', s.balance >= 0 ? 'text-violet-400' : 'text-red-400')}>
+                      <td className="px-4 py-3 text-right text-[13px] font-semibold" style={{ color: '#10b981' }}>
+                        {formatCurrency(s.totalIncome)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[13px] font-semibold" style={{ color: '#f43f5e' }}>
+                        {formatCurrency(s.totalExpense)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[13px] font-bold" style={{ color: s.balance>=0 ? '#a78bfa' : '#f43f5e' }}>
                         {formatCurrency(s.balance)}
                       </td>
-                      <td className={cn('px-4 py-3 text-right text-xs', s.totalIncome > 0 && s.balance >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-                        {s.totalIncome > 0 ? `${((s.balance / s.totalIncome) * 100).toFixed(1)}%` : '—'}
+                      <td className="px-4 py-3 text-right text-[12px] font-semibold">
+                        {s.totalIncome > 0 ? (
+                          <span className="flex items-center justify-end gap-0.5" style={{ color: s.balance>=0 ? '#10b981' : '#f43f5e' }}>
+                            {s.balance < 0 && <ArrowDownRight size={12} />}
+                            {((s.balance/s.totalIncome)*100).toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
                       </td>
-                      <td className="px-5 py-3 text-right text-slate-300">{formatCurrency(s.fixedExpense)}</td>
+                      <td className="px-5 py-3 text-right text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                        {formatCurrency(s.fixedExpense)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

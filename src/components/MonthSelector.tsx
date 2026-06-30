@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface MonthSelectorProps {
   year: number
@@ -16,10 +16,10 @@ export default function MonthSelector({ year, month, onChange }: MonthSelectorPr
 
   const goNext = () => {
     const now = new Date()
-    const nextYear = month === 12 ? year + 1 : year
-    const nextMonth = month === 12 ? 1 : month + 1
-    if (nextYear > now.getFullYear() || (nextYear === now.getFullYear() && nextMonth > now.getMonth() + 1)) return
-    onChange(nextYear, nextMonth)
+    const ny = month === 12 ? year + 1 : year
+    const nm = month === 12 ? 1 : month + 1
+    if (ny > now.getFullYear() || (ny === now.getFullYear() && nm > now.getMonth() + 1)) return
+    onChange(ny, nm)
   }
 
   const isCurrentMonth = () => {
@@ -27,18 +27,39 @@ export default function MonthSelector({ year, month, onChange }: MonthSelectorPr
     return year === now.getFullYear() && month === now.getMonth() + 1
   }
 
+  const btnStyle = {
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-secondary)',
+    borderRadius: '10px',
+    width: 32,
+    height: 32,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.15s ease',
+    cursor: 'pointer',
+    flexShrink: 0,
+  } as React.CSSProperties
+
   return (
     <div className="flex items-center gap-2">
-      <button
-        onClick={goPrev}
-        className="w-8 h-8 rounded-lg bg-[#1a1d27] border border-[#252836] flex items-center justify-center text-[#6b7280] hover:text-white hover:border-[#6c63ff50] transition-all"
-      >
-        <ChevronLeft className="w-4 h-4" />
+      <button onClick={goPrev} style={btnStyle} className="hover:border-[var(--border-light)] hover:text-white">
+        <ChevronLeft size={14} />
       </button>
 
-      <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1a1d27] border border-[#252836] min-w-[140px] justify-center">
-        <Calendar className="w-3.5 h-3.5 text-[#6c63ff]" />
-        <span className="text-sm font-semibold text-white">
+      <div
+        className="flex items-center gap-2 px-4"
+        style={{
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: '10px',
+          height: 32,
+          minWidth: 130,
+          justifyContent: 'center',
+        }}
+      >
+        <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
           {year}년 {month}월
         </span>
       </div>
@@ -46,18 +67,17 @@ export default function MonthSelector({ year, month, onChange }: MonthSelectorPr
       <button
         onClick={goNext}
         disabled={isCurrentMonth()}
-        className="w-8 h-8 rounded-lg bg-[#1a1d27] border border-[#252836] flex items-center justify-center text-[#6b7280] hover:text-white hover:border-[#6c63ff50] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        style={{ ...btnStyle, opacity: isCurrentMonth() ? 0.3 : 1, cursor: isCurrentMonth() ? 'not-allowed' : 'pointer' }}
+        className="hover:border-[var(--border-light)] hover:text-white"
       >
-        <ChevronRight className="w-4 h-4" />
+        <ChevronRight size={14} />
       </button>
 
       {!isCurrentMonth() && (
         <button
-          onClick={() => {
-            const now = new Date()
-            onChange(now.getFullYear(), now.getMonth() + 1)
-          }}
-          className="text-xs text-[#6c63ff] hover:text-[#8b84ff] transition-colors px-2"
+          onClick={() => { const n = new Date(); onChange(n.getFullYear(), n.getMonth() + 1) }}
+          className="text-[12px] font-medium px-2 transition-colors"
+          style={{ color: 'var(--primary-light)' }}
         >
           이번달
         </button>

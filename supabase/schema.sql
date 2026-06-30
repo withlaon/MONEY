@@ -1,8 +1,6 @@
--- =============================================
 -- MONEY 금전출납부 앱 - Supabase 스키마
--- =============================================
 
--- 입금처 테이블 (쇼핑몰, 기타 등)
+-- 입금처 테이블
 CREATE TABLE IF NOT EXISTS income_sources (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
@@ -16,30 +14,25 @@ CREATE TABLE IF NOT EXISTS income_sources (
 CREATE TABLE IF NOT EXISTS expense_categories (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  type VARCHAR(20) NOT NULL CHECK (type IN ('office', 'personal')), -- 사무실용 / 개인용
+  type VARCHAR(20) NOT NULL CHECK (type IN ('office', 'personal')),
   description TEXT,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 거래 내역 테이블 (수입/지출 통합)
+-- 거래 내역 테이블
 CREATE TABLE IF NOT EXISTS transactions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   transaction_type VARCHAR(10) NOT NULL CHECK (transaction_type IN ('income', 'expense')),
-  amount BIGINT NOT NULL, -- 원화 단위 (소수점 없음)
+  amount BIGINT NOT NULL,
   transaction_date DATE NOT NULL,
   description TEXT,
   memo TEXT,
-  
-  -- 수입 관련
   income_source_id UUID REFERENCES income_sources(id) ON DELETE SET NULL,
-  
-  -- 지출 관련
   expense_category_id UUID REFERENCES expense_categories(id) ON DELETE SET NULL,
-  expense_type VARCHAR(20) CHECK (expense_type IN ('office', 'personal')), -- 사무실용 / 개인용
-  is_fixed BOOLEAN DEFAULT false, -- 고정비 여부
-  
+  expense_type VARCHAR(20) CHECK (expense_type IN ('office', 'personal')),
+  is_fixed BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -57,10 +50,6 @@ CREATE TABLE IF NOT EXISTS monthly_budgets (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(year, month)
 );
-
--- =============================================
--- 기본 데이터 삽입
--- =============================================
 
 -- 기본 입금처
 INSERT INTO income_sources (name, description) VALUES
@@ -103,23 +92,18 @@ INSERT INTO expense_categories (name, type, description) VALUES
   ('기타개인비', 'personal', '기타 개인 지출')
 ON CONFLICT DO NOTHING;
 
--- =============================================
 -- 인덱스
--- =============================================
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
-CREATE INDEX IF NOT EXISTS idx_transactions_date_year_month ON transactions(EXTRACT(YEAR FROM transaction_date), EXTRACT(MONTH FROM transaction_date));
 
--- =============================================
--- RLS (Row Level Security) - 기본 비활성화
--- =============================================
+-- RLS 활성화
 ALTER TABLE income_sources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expense_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monthly_budgets ENABLE ROW LEVEL SECURITY;
 
--- 공개 접근 정책 (개인 사용 앱이므로 간단하게 설정)
-CREATE POLICY "Allow all operations on income_sources" ON income_sources FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all operations on expense_categories" ON expense_categories FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all operations on transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all operations on monthly_budgets" ON monthly_budgets FOR ALL USING (true) WITH CHECK (true);
+-- 공개 접근 정책 (개인 사용 앱)
+CREATE POLICY "Allow all on income_sources" ON income_sources FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on expense_categories" ON expense_categories FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on monthly_budgets" ON monthly_budgets FOR ALL USING (true) WITH CHECK (true);

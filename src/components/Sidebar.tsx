@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
-  ArrowDownUp,
-  TrendingUp,
-  Settings,
+  ArrowLeftRight,
+  BarChart3,
+  Settings2,
   Wallet,
   ChevronLeft,
   ChevronRight,
@@ -15,10 +15,10 @@ import {
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { href: '/', label: '대시보드', icon: LayoutDashboard },
-  { href: '/transactions', label: '거래내역', icon: ArrowDownUp },
-  { href: '/analysis', label: '분석/비교', icon: TrendingUp },
-  { href: '/settings', label: '설정', icon: Settings },
+  { href: '/',             label: '대시보드',  icon: LayoutDashboard, desc: '월별 현황' },
+  { href: '/transactions', label: '거래내역',  icon: ArrowLeftRight,  desc: '수입/지출' },
+  { href: '/analysis',     label: '분석/비교', icon: BarChart3,       desc: '추이 분석' },
+  { href: '/settings',     label: '설정',      icon: Settings2,       desc: '카테고리' },
 ]
 
 export default function Sidebar() {
@@ -28,68 +28,117 @@ export default function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col bg-[#13151f] border-r border-[#1e2130] transition-all duration-300 relative z-10',
-        collapsed ? 'w-16' : 'w-60'
+        'relative flex flex-col transition-all duration-300 ease-in-out z-20 flex-shrink-0',
+        collapsed ? 'w-[60px]' : 'w-[220px]'
       )}
+      style={{
+        background: 'var(--bg-surface)',
+        borderRight: '1px solid var(--border)',
+      }}
     >
-      {/* 로고 */}
-      <div className={cn(
-        'flex items-center gap-3 px-4 py-5 border-b border-[#1e2130]',
-        collapsed && 'justify-center px-2'
-      )}>
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6c63ff] to-[#4f46e5] flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#6c63ff30]">
-          <Wallet className="w-5 h-5 text-white" />
+      {/* 로고 영역 */}
+      <div
+        className={cn(
+          'flex items-center gap-3 py-5 transition-all duration-300',
+          collapsed ? 'px-3 justify-center' : 'px-5'
+        )}
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        <div
+          className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(135deg, #7b6fe0, #5b4fd4)',
+            boxShadow: '0 4px 15px rgba(123,111,224,0.35)',
+          }}
+        >
+          <Wallet className="w-4.5 h-4.5 text-white" size={18} />
         </div>
         {!collapsed && (
-          <div>
-            <h1 className="font-bold text-white text-lg leading-tight">MONEY</h1>
-            <p className="text-[10px] text-[#6b7280] tracking-wider">금전출납부</p>
+          <div className="min-w-0">
+            <p className="font-bold text-base leading-tight tracking-tight" style={{ color: 'var(--text-primary)' }}>
+              MONEY
+            </p>
+            <p className="text-[11px] font-medium tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>
+              금전출납부
+            </p>
           </div>
         )}
       </div>
 
       {/* 네비게이션 */}
-      <nav className="flex-1 px-2 py-4 space-y-1">
+      <nav className="flex-1 py-4 px-2 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
+          const isActive = pathname === item.href ||
+            (item.href !== '/' && pathname.startsWith(item.href))
+
           return (
             <Link
               key={item.href}
               href={item.href}
+              title={collapsed ? item.label : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                collapsed && 'justify-center px-2',
+                'group flex items-center rounded-xl transition-all duration-200',
+                collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
                 isActive
-                  ? 'bg-[#6c63ff20] text-[#8b84ff] border border-[#6c63ff30]'
-                  : 'text-[#6b7280] hover:text-white hover:bg-[#1a1d27]'
+                  ? 'text-white'
+                  : 'hover:text-white'
               )}
+              style={{
+                background: isActive ? 'var(--primary-glow)' : 'transparent',
+                border: `1px solid ${isActive ? 'rgba(123,111,224,0.3)' : 'transparent'}`,
+                color: isActive ? 'var(--primary-light)' : 'var(--text-muted)',
+              }}
             >
-              <Icon className={cn('flex-shrink-0', collapsed ? 'w-5 h-5' : 'w-4 h-4')} />
-              {!collapsed && <span>{item.label}</span>}
+              <div
+                className={cn(
+                  'flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200',
+                  isActive ? '' : 'group-hover:bg-white/5'
+                )}
+                style={{
+                  background: isActive ? 'rgba(123,111,224,0.2)' : 'transparent',
+                  color: isActive ? 'var(--primary-light)' : 'inherit',
+                }}
+              >
+                <Icon size={16} />
+              </div>
+              {!collapsed && (
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium leading-tight">{item.label}</p>
+                  <p className="text-[11px] leading-tight mt-0.5" style={{ color: 'var(--text-muted)', opacity: isActive ? 0.8 : 0.6 }}>
+                    {item.desc}
+                  </p>
+                </div>
+              )}
               {isActive && !collapsed && (
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#6c63ff]" />
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--primary-light)' }} />
               )}
             </Link>
           )
         })}
       </nav>
 
-      {/* 하단 정보 */}
+      {/* 하단 */}
       {!collapsed && (
-        <div className="px-4 py-3 border-t border-[#1e2130]">
-          <p className="text-[10px] text-[#3d4168] text-center">
+        <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+          <p className="text-[11px] text-center" style={{ color: 'var(--text-muted)' }}>
             © 2026 MONEY App
           </p>
         </div>
       )}
 
-      {/* 접기/펼치기 버튼 */}
+      {/* 접기 버튼 */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-7 w-6 h-6 rounded-full bg-[#1e2130] border border-[#252836] flex items-center justify-center text-[#6b7280] hover:text-white transition-colors"
+        className="absolute -right-3 top-6 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
+        style={{
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-light)',
+          color: 'var(--text-muted)',
+          zIndex: 30,
+        }}
       >
-        {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+        {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
       </button>
     </aside>
   )
