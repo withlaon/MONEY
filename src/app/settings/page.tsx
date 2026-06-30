@@ -5,229 +5,163 @@ import { Plus, Building2, User, ShoppingBag, Check, X } from 'lucide-react'
 import { useIncomeSources, useExpenseCategories } from '@/hooks/useTransactions'
 import { cn } from '@/lib/utils'
 
-const inputStyle = {
-  width: '100%',
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border)',
-  borderRadius: '10px',
-  padding: '10px 14px',
-  fontSize: '13px',
-  color: 'var(--text-primary)',
-} as React.CSSProperties
+const field: React.CSSProperties = {
+  width:'100%', background:'var(--bg-base)',
+  border:'1px solid var(--border)', borderRadius:10,
+  padding:'10px 14px', fontSize:13, color:'var(--text-1)',
+}
 
 export default function SettingsPage() {
   const { sources, addSource } = useIncomeSources()
   const { categories, addCategory } = useExpenseCategories()
 
-  const [newSourceName, setNewSourceName] = useState('')
-  const [newSourceDesc, setNewSourceDesc] = useState('')
-  const [addingSource, setAddingSource] = useState(false)
-  const [sourceLoading, setSourceLoading] = useState(false)
+  const [srcName, setSrcName] = useState(''); const [srcDesc, setSrcDesc] = useState('')
+  const [addSrc, setAddSrc] = useState(false); const [srcLoad, setSrcLoad] = useState(false)
 
-  const [newCatName, setNewCatName] = useState('')
-  const [newCatType, setNewCatType] = useState<'office' | 'personal'>('office')
-  const [newCatDesc, setNewCatDesc] = useState('')
-  const [addingCat, setAddingCat] = useState(false)
-  const [catLoading, setCatLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [catName, setCatName] = useState(''); const [catDesc, setCatDesc] = useState('')
+  const [catType, setCatType] = useState<'office'|'personal'>('office')
+  const [addCat, setAddCat] = useState(false); const [catLoad, setCatLoad] = useState(false)
+  const [err, setErr] = useState('')
 
-  const officeCategories = categories.filter(c => c.type === 'office')
-  const personalCategories = categories.filter(c => c.type === 'personal')
+  const office   = categories.filter(c => c.type==='office')
+  const personal = categories.filter(c => c.type==='personal')
 
-  const handleAddSource = async () => {
-    if (!newSourceName.trim()) return
-    setSourceLoading(true); setError('')
-    try {
-      await addSource(newSourceName.trim(), newSourceDesc.trim() || undefined)
-      setNewSourceName(''); setNewSourceDesc(''); setAddingSource(false)
-    } catch { setError('입금처 추가에 실패했습니다.') }
-    finally { setSourceLoading(false) }
+  const doAddSrc = async () => {
+    if (!srcName.trim()) return
+    setSrcLoad(true); setErr('')
+    try { await addSource(srcName.trim(), srcDesc.trim()||undefined); setSrcName(''); setSrcDesc(''); setAddSrc(false) }
+    catch { setErr('입금처 추가 실패') } finally { setSrcLoad(false) }
+  }
+  const doAddCat = async () => {
+    if (!catName.trim()) return
+    setCatLoad(true); setErr('')
+    try { await addCategory(catName.trim(), catType, catDesc.trim()||undefined); setCatName(''); setCatDesc(''); setAddCat(false) }
+    catch { setErr('카테고리 추가 실패') } finally { setCatLoad(false) }
   }
 
-  const handleAddCategory = async () => {
-    if (!newCatName.trim()) return
-    setCatLoading(true); setError('')
-    try {
-      await addCategory(newCatName.trim(), newCatType, newCatDesc.trim() || undefined)
-      setNewCatName(''); setNewCatDesc(''); setAddingCat(false)
-    } catch { setError('카테고리 추가에 실패했습니다.') }
-    finally { setCatLoading(false) }
-  }
-
-  const SectionHeader = ({ icon, title, count, onAdd }: { icon: React.ReactNode; title: string; count: number; onAdd: () => void }) => (
-    <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+  const SecHeader = ({ icon, title, count, onAdd }: { icon: React.ReactNode; title: string; count: number; onAdd: () => void }) => (
+    <div className="flex items-center justify-between px-4 sm:px-5 py-4" style={{ borderBottom:'1px solid var(--border)' }}>
       <div className="flex items-center gap-2">
         {icon}
-        <p className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</p>
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
-          {count}개
-        </span>
+        <p className="text-[13px] sm:text-[14px] font-semibold" style={{ color:'var(--text-1)' }}>{title}</p>
+        <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background:'var(--bg-elevated)', color:'var(--text-3)' }}>{count}개</span>
       </div>
-      <button
-        onClick={onAdd}
-        className="flex items-center gap-1 text-[12px] font-semibold transition-colors"
-        style={{ color: 'var(--primary-light)' }}
-      >
-        <Plus size={13} /> 추가
+      <button onClick={onAdd} className="flex items-center gap-1 text-[12px] font-bold" style={{ color:'var(--primary-light)' }}>
+        <Plus size={13}/> 추가
       </button>
     </div>
   )
 
-  const AddForm = ({ children }: { children: React.ReactNode }) => (
-    <div className="px-5 py-4 fade-in" style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
+  const AddBox = ({ children }: { children: React.ReactNode }) => (
+    <div className="px-4 sm:px-5 py-4 fade-in space-y-2.5" style={{ background:'var(--bg-elevated)', borderBottom:'1px solid var(--border)' }}>
       {children}
     </div>
   )
 
-  const CategoryGroupHeader = ({ type }: { type: 'office' | 'personal' }) => (
-    <div className="px-5 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border)' }}>
+  const BtnsRow = ({ onConfirm, onCancel, loading, disabled, label }: { onConfirm:()=>void; onCancel:()=>void; loading:boolean; disabled:boolean; label:string }) => (
+    <div className="flex gap-2 pt-1">
+      <button onClick={onConfirm} disabled={loading||disabled}
+        className={cn('flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold', (loading||disabled)&&'opacity-50')}
+        style={{ background:'var(--primary-glow)', border:'1px solid rgba(124,111,224,0.28)', color:'var(--primary-light)' }}>
+        <Check size={13}/>{loading?'추가 중...':label}
+      </button>
+      <button onClick={onCancel} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-medium"
+        style={{ background:'var(--bg-card)', border:'1px solid var(--border)', color:'var(--text-3)' }}>
+        <X size={13}/>취소
+      </button>
+    </div>
+  )
+
+  const GroupLabel = ({ type }: { type: 'office'|'personal' }) => (
+    <div className="px-4 sm:px-5 py-2.5" style={{ background:'rgba(255,255,255,0.015)', borderBottom:'1px solid var(--border)' }}>
       <div className="flex items-center gap-1.5">
-        {type === 'office'
-          ? <Building2 size={12} style={{ color: '#3b82f6' }} />
-          : <User size={12} style={{ color: '#f97316' }} />
-        }
-        <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: type==='office' ? '#3b82f6' : '#f97316' }}>
-          {type === 'office' ? '사무실 지출' : '개인 지출'}
+        {type==='office' ? <Building2 size={11} style={{ color:'var(--office)' }}/> : <User size={11} style={{ color:'var(--personal)' }}/>}
+        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider" style={{ color:type==='office'?'var(--office)':'var(--personal)' }}>
+          {type==='office'?'사무실 지출':'개인 지출'}
         </span>
       </div>
     </div>
   )
 
+  const Row = ({ name, desc, badge, bc, bbg }: { name:string; desc:string|null; badge:string; bc:string; bbg:string }) => (
+    <div className="flex items-center justify-between px-4 sm:px-5 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] sm:text-[13px] font-medium" style={{ color:'var(--text-1)' }}>{name}</p>
+        {desc && <p className="text-[10px] sm:text-[11px] mt-0.5 truncate" style={{ color:'var(--text-3)' }}>{desc}</p>}
+      </div>
+      <span className="flex-shrink-0 ml-3 text-[10px] sm:text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background:bbg, color:bc }}>{badge}</span>
+    </div>
+  )
+
   return (
-    <div className="min-h-full p-5 sm:p-7 max-w-[900px] mx-auto space-y-5">
+    <div className="px-4 py-5 sm:px-6 sm:py-7 max-w-[900px] mx-auto space-y-4 sm:space-y-5">
 
       <div className="fade-up">
-        <h1 className="text-[22px] font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>설정</h1>
-        <p className="text-[13px] mt-0.5" style={{ color: 'var(--text-muted)' }}>입금처 및 지출 카테고리 관리</p>
+        <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight" style={{ color:'var(--text-1)' }}>설정</h1>
+        <p className="text-[12px] sm:text-[13px] mt-0.5" style={{ color:'var(--text-3)' }}>입금처 및 지출 카테고리 관리</p>
       </div>
 
-      {error && (
-        <div className="text-[13px] px-4 py-3 rounded-xl fade-in" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', color: '#f43f5e' }}>
-          {error}
+      {err && (
+        <div className="text-[12px] sm:text-[13px] px-4 py-3 rounded-xl fade-in" style={{ background:'var(--expense-soft)', border:'1px solid var(--expense-border)', color:'var(--expense)' }}>
+          {err}
         </div>
       )}
 
       {/* 입금처 */}
-      <div className="rounded-2xl overflow-hidden fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <SectionHeader
-          icon={<ShoppingBag size={15} style={{ color: '#10b981' }} />}
-          title="입금처 관리"
-          count={sources.length}
-          onAdd={() => setAddingSource(!addingSource)}
-        />
-        {addingSource && (
-          <AddForm>
-            <div className="space-y-2">
-              <input autoFocus type="text" value={newSourceName} onChange={e => setNewSourceName(e.target.value)}
-                placeholder="입금처 이름 (예: 위메프)" style={{ ...inputStyle, borderColor: 'var(--primary)' }}
-                onKeyDown={e => e.key === 'Enter' && handleAddSource()} />
-              <input type="text" value={newSourceDesc} onChange={e => setNewSourceDesc(e.target.value)}
-                placeholder="설명 (선택사항)" style={inputStyle} />
-              <div className="flex gap-2 pt-1">
-                <button onClick={handleAddSource} disabled={sourceLoading || !newSourceName.trim()}
-                  className={cn('flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all', (sourceLoading || !newSourceName.trim()) && 'opacity-50 cursor-not-allowed')}
-                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', color: '#10b981' }}>
-                  <Check size={13} />{sourceLoading ? '추가 중...' : '추가'}
-                </button>
-                <button onClick={() => { setAddingSource(false); setNewSourceName(''); setNewSourceDesc('') }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-medium"
-                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                  <X size={13} />취소
-                </button>
-              </div>
-            </div>
-          </AddForm>
+      <div className="rounded-2xl overflow-hidden fade-up" style={{ background:'var(--bg-card)', border:'1px solid var(--border)' }}>
+        <SecHeader icon={<ShoppingBag size={14} style={{ color:'var(--income)' }}/>} title="입금처 관리" count={sources.length} onAdd={() => setAddSrc(!addSrc)}/>
+        {addSrc && (
+          <AddBox>
+            <input autoFocus type="text" value={srcName} onChange={e => setSrcName(e.target.value)}
+              placeholder="입금처 이름 (예: 위메프)" style={{ ...field, borderColor:'var(--primary)' }}
+              onKeyDown={e => e.key==='Enter' && doAddSrc()}/>
+            <input type="text" value={srcDesc} onChange={e => setSrcDesc(e.target.value)}
+              placeholder="설명 (선택)" style={field}/>
+            <BtnsRow onConfirm={doAddSrc} onCancel={() => {setAddSrc(false);setSrcName('');setSrcDesc('')}} loading={srcLoad} disabled={!srcName.trim()} label="추가"/>
+          </AddBox>
         )}
-        <div>
-          {sources.map((s, i) => (
-            <div
-              key={s.id}
-              className="flex items-center justify-between px-5 py-3.5"
-              style={{ borderBottom: i < sources.length-1 ? '1px solid var(--border)' : 'none' }}
-            >
-              <div>
-                <p className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>{s.name}</p>
-                {s.description && <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{s.description}</p>}
-              </div>
-              <span className="text-[11px] font-semibold px-2 py-1 rounded-lg" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>활성</span>
-            </div>
+        <div className="divide-y" style={{ borderColor:'var(--border)' }}>
+          {sources.map(s => (
+            <Row key={s.id} name={s.name} desc={s.description} badge="활성" bc="var(--income)" bbg="var(--income-soft)"/>
           ))}
         </div>
       </div>
 
-      {/* 지출 카테고리 */}
-      <div className="rounded-2xl overflow-hidden fade-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <SectionHeader
-          icon={<Building2 size={15} style={{ color: '#3b82f6' }} />}
-          title="지출 카테고리 관리"
-          count={categories.length}
-          onAdd={() => setAddingCat(!addingCat)}
-        />
-        {addingCat && (
-          <AddForm>
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                {(['office','personal'] as const).map(t => (
-                  <button key={t} type="button" onClick={() => setNewCatType(t)}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold border transition-all"
-                    style={{
-                      background: newCatType===t ? (t==='office' ? 'rgba(59,130,246,0.12)' : 'rgba(249,115,22,0.12)') : 'var(--bg-base)',
-                      border: `1px solid ${newCatType===t ? (t==='office' ? 'rgba(59,130,246,0.3)' : 'rgba(249,115,22,0.3)') : 'var(--border)'}`,
-                      color: newCatType===t ? (t==='office' ? '#3b82f6' : '#f97316') : 'var(--text-muted)',
-                    }}>
-                    {t==='office' ? <Building2 size={13}/> : <User size={13}/>}
-                    {t==='office' ? '사무실' : '개인'}
-                  </button>
-                ))}
-              </div>
-              <input autoFocus type="text" value={newCatName} onChange={e => setNewCatName(e.target.value)}
-                placeholder={`카테고리 이름 (예: ${newCatType==='office' ? '보관료' : '헬스장'})`}
-                style={{ ...inputStyle, borderColor: 'var(--primary)' }}
-                onKeyDown={e => e.key==='Enter' && handleAddCategory()} />
-              <input type="text" value={newCatDesc} onChange={e => setNewCatDesc(e.target.value)}
-                placeholder="설명 (선택사항)" style={inputStyle} />
-              <div className="flex gap-2 pt-1">
-                <button onClick={handleAddCategory} disabled={catLoading || !newCatName.trim()}
-                  className={cn('flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all', (catLoading || !newCatName.trim()) && 'opacity-50 cursor-not-allowed')}
-                  style={{ background: 'rgba(123,111,224,0.12)', border: '1px solid rgba(123,111,224,0.25)', color: 'var(--primary-light)' }}>
-                  <Check size={13}/>{catLoading ? '추가 중...' : '추가'}
+      {/* 카테고리 */}
+      <div className="rounded-2xl overflow-hidden fade-up" style={{ background:'var(--bg-card)', border:'1px solid var(--border)' }}>
+        <SecHeader icon={<Building2 size={14} style={{ color:'var(--office)' }}/>} title="지출 카테고리 관리" count={categories.length} onAdd={() => setAddCat(!addCat)}/>
+        {addCat && (
+          <AddBox>
+            <div className="grid grid-cols-2 gap-2">
+              {(['office','personal'] as const).map(t => (
+                <button key={t} type="button" onClick={() => setCatType(t)}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] sm:text-[13px] font-bold border transition-all"
+                  style={{
+                    background: catType===t?(t==='office'?'var(--office-soft)':'var(--personal-soft)'):'var(--bg-base)',
+                    border: `1px solid ${catType===t?(t==='office'?'rgba(59,130,246,0.3)':'rgba(249,115,22,0.3)'):'var(--border)'}`,
+                    color: catType===t?(t==='office'?'var(--office)':'var(--personal)'):'var(--text-3)',
+                  }}>
+                  {t==='office'?<Building2 size={13}/>:<User size={13}/>}
+                  {t==='office'?'사무실':'개인'}
                 </button>
-                <button onClick={() => { setAddingCat(false); setNewCatName(''); setNewCatDesc('') }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-medium"
-                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                  <X size={13}/>취소
-                </button>
-              </div>
+              ))}
             </div>
-          </AddForm>
+            <input autoFocus type="text" value={catName} onChange={e => setCatName(e.target.value)}
+              placeholder={`카테고리 이름 (예: ${catType==='office'?'보관료':'헬스장'})`}
+              style={{ ...field, borderColor:'var(--primary)' }}
+              onKeyDown={e => e.key==='Enter' && doAddCat()}/>
+            <input type="text" value={catDesc} onChange={e => setCatDesc(e.target.value)}
+              placeholder="설명 (선택)" style={field}/>
+            <BtnsRow onConfirm={doAddCat} onCancel={() => {setAddCat(false);setCatName('');setCatDesc('')}} loading={catLoad} disabled={!catName.trim()} label="추가"/>
+          </AddBox>
         )}
-
-        <CategoryGroupHeader type="office" />
-        <div>
-          {officeCategories.map((c, i) => (
-            <div key={c.id} className="flex items-center justify-between px-5 py-3"
-              style={{ borderBottom: '1px solid var(--border)' }}>
-              <div>
-                <p className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
-                {c.description && <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.description}</p>}
-              </div>
-              <span className="text-[11px] font-semibold px-2 py-1 rounded-lg" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>사무실</span>
-            </div>
-          ))}
+        <GroupLabel type="office"/>
+        <div className="divide-y" style={{ borderColor:'var(--border)' }}>
+          {office.map(c => <Row key={c.id} name={c.name} desc={c.description} badge="사무실" bc="var(--office)" bbg="var(--office-soft)"/>)}
         </div>
-
-        <CategoryGroupHeader type="personal" />
-        <div>
-          {personalCategories.map((c, i) => (
-            <div key={c.id} className="flex items-center justify-between px-5 py-3"
-              style={{ borderBottom: i < personalCategories.length-1 ? '1px solid var(--border)' : 'none' }}>
-              <div>
-                <p className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
-                {c.description && <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.description}</p>}
-              </div>
-              <span className="text-[11px] font-semibold px-2 py-1 rounded-lg" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316' }}>개인</span>
-            </div>
-          ))}
+        <GroupLabel type="personal"/>
+        <div className="divide-y" style={{ borderColor:'var(--border)' }}>
+          {personal.map(c => <Row key={c.id} name={c.name} desc={c.description} badge="개인" bc="var(--personal)" bbg="var(--personal-soft)"/>)}
         </div>
       </div>
     </div>

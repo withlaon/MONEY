@@ -4,103 +4,51 @@ import { TrendingUp, TrendingDown, Wallet, Building2, User, Lock } from 'lucide-
 import { formatCurrency } from '@/lib/utils'
 import { MonthlyStats } from '@/lib/supabase'
 
-interface StatsCardsProps {
-  stats: MonthlyStats
-}
+interface Props { stats: MonthlyStats }
 
-const cards = [
-  {
-    key: 'totalIncome',
-    label: '총 수입',
-    icon: TrendingUp,
-    color: '#10b981',
-    bg: 'rgba(16,185,129,0.08)',
-    border: 'rgba(16,185,129,0.2)',
-    iconBg: 'rgba(16,185,129,0.15)',
-  },
-  {
-    key: 'totalExpense',
-    label: '총 지출',
-    icon: TrendingDown,
-    color: '#f43f5e',
-    bg: 'rgba(244,63,94,0.08)',
-    border: 'rgba(244,63,94,0.2)',
-    iconBg: 'rgba(244,63,94,0.15)',
-  },
-  {
-    key: 'balance',
-    label: '순수익',
-    icon: Wallet,
-    color: '#7b6fe0',
-    bg: 'rgba(123,111,224,0.08)',
-    border: 'rgba(123,111,224,0.2)',
-    iconBg: 'rgba(123,111,224,0.15)',
-    dynamic: true,
-  },
-  {
-    key: 'officeExpense',
-    label: '사무실 지출',
-    icon: Building2,
-    color: '#3b82f6',
-    bg: 'rgba(59,130,246,0.06)',
-    border: 'rgba(59,130,246,0.15)',
-    iconBg: 'rgba(59,130,246,0.12)',
-  },
-  {
-    key: 'personalExpense',
-    label: '개인 지출',
-    icon: User,
-    color: '#f97316',
-    bg: 'rgba(249,115,22,0.06)',
-    border: 'rgba(249,115,22,0.15)',
-    iconBg: 'rgba(249,115,22,0.12)',
-  },
-  {
-    key: 'fixedExpense',
-    label: '고정비',
-    icon: Lock,
-    color: '#94a3b8',
-    bg: 'rgba(148,163,184,0.06)',
-    border: 'rgba(148,163,184,0.15)',
-    iconBg: 'rgba(148,163,184,0.1)',
-  },
-]
+const CARDS = [
+  { key: 'totalIncome',    label: '총 수입',    icon: TrendingUp,  color: '#10b981', soft: 'rgba(16,185,129,0.09)',  border: 'rgba(16,185,129,0.2)'  },
+  { key: 'totalExpense',   label: '총 지출',    icon: TrendingDown,color: '#f43f5e', soft: 'rgba(244,63,94,0.09)',   border: 'rgba(244,63,94,0.2)'   },
+  { key: 'balance',        label: '순수익',     icon: Wallet,      color: '#9d91f5', soft: 'rgba(124,111,224,0.09)', border: 'rgba(124,111,224,0.22)', dynamic: true },
+  { key: 'officeExpense',  label: '사무실 지출', icon: Building2,  color: '#3b82f6', soft: 'rgba(59,130,246,0.07)',  border: 'rgba(59,130,246,0.18)' },
+  { key: 'personalExpense',label: '개인 지출',  icon: User,        color: '#f97316', soft: 'rgba(249,115,22,0.07)',  border: 'rgba(249,115,22,0.18)' },
+  { key: 'fixedExpense',   label: '고정비',     icon: Lock,        color: '#94a3b8', soft: 'rgba(148,163,184,0.07)', border: 'rgba(148,163,184,0.18)' },
+] as const
 
-export default function StatsCards({ stats }: StatsCardsProps) {
+export default function StatsCards({ stats }: Props) {
   return (
     <div className="stats-grid">
-      {cards.map((card) => {
-        const Icon = card.icon
-        const value = stats[card.key as keyof MonthlyStats] as number
-        const isNegative = card.dynamic && value < 0
-        const color = isNegative ? '#f43f5e' : card.color
-        const bg = isNegative ? 'rgba(244,63,94,0.08)' : card.bg
-        const border = isNegative ? 'rgba(244,63,94,0.2)' : card.border
-        const iconBg = isNegative ? 'rgba(244,63,94,0.15)' : card.iconBg
+      {CARDS.map(c => {
+        const Icon = c.icon
+        const val  = stats[c.key as keyof MonthlyStats] as number
+        const neg  = 'dynamic' in c && val < 0
+        const color  = neg ? '#f43f5e' : c.color
+        const soft   = neg ? 'rgba(244,63,94,0.09)'  : c.soft
+        const border = neg ? 'rgba(244,63,94,0.2)'   : c.border
 
         return (
           <div
-            key={card.key}
-            className="hover-card rounded-2xl p-4 fade-up"
-            style={{ background: bg, border: `1px solid ${border}` }}
+            key={c.key}
+            className="hover-card fade-up rounded-2xl p-3 sm:p-4"
+            style={{ background: soft, border: `1px solid ${border}` }}
           >
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-[12px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-                {card.label}
+            <div className="flex items-start justify-between mb-2 sm:mb-3">
+              <p className="text-[11px] sm:text-[12px] font-medium leading-tight" style={{ color: 'var(--text-2)' }}>
+                {c.label}
               </p>
               <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: iconBg, color }}
+                className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: `${color}22`, color }}
               >
-                <Icon size={14} />
+                <Icon size={13} />
               </div>
             </div>
-            <p className="text-[15px] font-bold leading-tight truncate" style={{ color }}>
-              {formatCurrency(value)}
+            <p className="text-[13px] sm:text-[15px] font-bold leading-tight truncate" style={{ color }}>
+              {formatCurrency(val)}
             </p>
-            {card.key === 'balance' && stats.totalIncome > 0 && (
-              <p className="text-[11px] mt-1 font-medium" style={{ color: isNegative ? '#f43f5e99' : '#10b98199' }}>
-                수익률 {((value / stats.totalIncome) * 100).toFixed(1)}%
+            {c.key === 'balance' && stats.totalIncome > 0 && (
+              <p className="text-[10px] sm:text-[11px] mt-1 font-semibold" style={{ color: neg ? '#f4435e88' : '#10b98180' }}>
+                {((val / stats.totalIncome) * 100).toFixed(1)}%
               </p>
             )}
           </div>
