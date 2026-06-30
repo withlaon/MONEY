@@ -7,55 +7,96 @@ import { MonthlyStats } from '@/lib/supabase'
 interface Props { stats: MonthlyStats }
 
 const CARDS = [
-  { key:'totalIncome',    label:'총 수입',    icon:TrendingUp,  color:'var(--income)',   iconBg:'var(--income-soft)',   border:'var(--income-border)',   accent:'#d1fae5' },
-  { key:'totalExpense',   label:'총 지출',    icon:TrendingDown,color:'var(--expense)',  iconBg:'var(--expense-soft)',  border:'var(--expense-border)',  accent:'#fee2e2' },
-  { key:'balance',        label:'순수익',     icon:Wallet,      color:'var(--primary)',  iconBg:'var(--primary-soft)',  border:'var(--primary-border)',  accent:'#ede9fe', dynamic:true },
-  { key:'officeExpense',  label:'사무실 지출',icon:Building2,   color:'var(--office)',   iconBg:'var(--office-soft)',   border:'var(--office-border)',   accent:'#dbeafe' },
-  { key:'personalExpense',label:'개인 지출',  icon:User,        color:'var(--personal)', iconBg:'var(--personal-soft)', border:'var(--personal-border)', accent:'#ffedd5' },
-  { key:'fixedExpense',   label:'고정비',     icon:Lock,        color:'var(--fixed)',    iconBg:'var(--fixed-soft)',    border:'var(--fixed-border)',    accent:'#f1f5f9' },
+  {
+    key: 'totalIncome', label: '총 수입', icon: TrendingUp,
+    color: '#059669', soft: '#ecfdf5', border: '#a7f3d0', bar: '#059669',
+  },
+  {
+    key: 'totalExpense', label: '총 지출', icon: TrendingDown,
+    color: '#dc2626', soft: '#fef2f2', border: '#fca5a5', bar: '#dc2626',
+  },
+  {
+    key: 'balance', label: '순수익', icon: Wallet,
+    color: '#4f46e5', soft: '#eef0fe', border: '#c7c3fa', bar: '#4f46e5',
+    dynamic: true,
+  },
+  {
+    key: 'officeExpense', label: '사무실 지출', icon: Building2,
+    color: '#2563eb', soft: '#eff6ff', border: '#bfdbfe', bar: '#2563eb',
+  },
+  {
+    key: 'personalExpense', label: '개인 지출', icon: User,
+    color: '#ea580c', soft: '#fff7ed', border: '#fed7aa', bar: '#ea580c',
+  },
+  {
+    key: 'fixedExpense', label: '고정비', icon: Lock,
+    color: '#6b7280', soft: '#f3f4f6', border: '#d1d5db', bar: '#6b7280',
+  },
 ] as const
 
 export default function StatsCards({ stats }: Props) {
   return (
     <div className="stats-grid">
-      {CARDS.map(c => {
-        const Icon = c.icon
-        const val  = stats[c.key as keyof MonthlyStats] as number
-        const neg  = 'dynamic' in c && val < 0
-        const color  = neg ? 'var(--expense)' : c.color
-        const iconBg = neg ? 'var(--expense-soft)' : c.iconBg
-        const border = neg ? 'var(--expense-border)' : c.border
+      {CARDS.map((c, i) => {
+        const Icon  = c.icon
+        const val   = stats[c.key as keyof MonthlyStats] as number
+        const isNeg = 'dynamic' in c && val < 0
+        const color  = isNeg ? '#dc2626' : c.color
+        const soft   = isNeg ? '#fef2f2' : c.soft
+        const bar    = isNeg ? '#dc2626' : c.bar
+
+        const pct = c.key === 'balance' && stats.totalIncome > 0
+          ? ((val / stats.totalIncome) * 100).toFixed(1)
+          : null
 
         return (
           <div
             key={c.key}
-            className="fade-up rounded-2xl p-4 sm:p-5 transition-all duration-200 cursor-default"
+            className="fade-up relative overflow-hidden"
             style={{
               background: 'var(--day-card)',
-              border: `1px solid ${border}`,
+              border: '1px solid var(--day-border)',
+              borderRadius: 16,
               boxShadow: 'var(--day-shadow)',
+              animationDelay: `${i * 40}ms`,
             }}
           >
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[13px] sm:text-[14px] font-semibold" style={{ color: 'var(--day-text2)' }}>
-                {c.label}
-              </p>
-              <div
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: iconBg, color }}
-              >
-                <Icon size={15} />
+            {/* 상단 컬러 바 */}
+            <div style={{ height: 3, background: bar, borderRadius: '16px 16px 0 0' }} />
+
+            <div className="p-4 sm:p-5">
+              {/* 레이블 + 아이콘 */}
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[12px] font-bold" style={{ color: 'var(--day-text3)' }}>
+                  {c.label}
+                </span>
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: soft, color }}
+                >
+                  <Icon size={14} />
+                </div>
               </div>
-            </div>
-            <p className="text-[16px] sm:text-[18px] font-extrabold leading-tight truncate" style={{ color }}>
-              {formatCurrency(val)}
-            </p>
-            {c.key === 'balance' && stats.totalIncome > 0 && (
-              <p className="text-[12px] font-semibold mt-1.5 px-2 py-0.5 rounded-lg inline-block"
-                style={{ background: neg ? 'var(--expense-soft)' : 'var(--income-soft)', color: neg ? 'var(--expense)' : 'var(--income)' }}>
-                {((val / stats.totalIncome) * 100).toFixed(1)}%
+
+              {/* 금액 */}
+              <p
+                className="text-[17px] sm:text-[19px] font-extrabold leading-none truncate"
+                style={{ color }}
+              >
+                {val > 0 && c.key === 'balance' ? '+' : ''}{formatCurrency(val)}
               </p>
-            )}
+
+              {/* 수익률 배지 */}
+              {pct && (
+                <div className="mt-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold"
+                  style={{
+                    background: isNeg ? '#fef2f2' : '#ecfdf5',
+                    color: isNeg ? '#dc2626' : '#059669',
+                  }}>
+                  {pct}%
+                </div>
+              )}
+            </div>
           </div>
         )
       })}

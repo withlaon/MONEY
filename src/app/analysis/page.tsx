@@ -74,13 +74,13 @@ export default function AnalysisPage() {
   const yf=(v:number)=>v>=1000000?`${(v/1000000).toFixed(0)}M`:v>=1000?`${(v/1000).toFixed(0)}K`:`${v}`
 
   const Card = ({children,className=''}:{children:React.ReactNode;className?:string}) => (
-    <div className={`rounded-3xl p-5 sm:p-7 fade-up ${className}`}
-      style={{ background:'var(--day-card)', border:'1px solid var(--day-border)', boxShadow:'var(--day-shadow)' }}>
+    <div className={`fade-up ${className}`}
+      style={{ background:'var(--day-card)', border:'1px solid var(--day-border)', borderRadius: 16, boxShadow:'var(--day-shadow)', padding: '20px 24px' }}>
       {children}
     </div>
   )
   const Title = ({t}:{t:string}) => (
-    <p className="text-[15px] sm:text-[17px] font-extrabold mb-4 sm:mb-5" style={{ color:'var(--day-text1)' }}>{t}</p>
+    <p style={{ fontSize: 15, fontWeight: 800, color:'var(--day-text1)', marginBottom: 20 }}>{t}</p>
   )
 
   return (
@@ -111,7 +111,7 @@ export default function AnalysisPage() {
 
       {loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {Array.from({length:4}).map((_,i)=><div key={i} className="h-64 rounded-3xl animate-pulse" style={{ background:'var(--day-card)'}}/>)}
+          {Array.from({length:4}).map((_,i)=><div key={i} className="skeleton" style={{ height: 260, borderRadius: 16 }}/>)}
         </div>
       ) : (
         <>
@@ -176,8 +176,8 @@ export default function AnalysisPage() {
           </Card>
 
           {/* 예측 */}
-          <div className="rounded-3xl p-5 sm:p-7 fade-up"
-            style={{ background:'linear-gradient(135deg,#eef0ff,#f0f7ff)', border:'1.5px solid var(--primary-border)', boxShadow:'var(--day-shadow-lg)' }}>
+          <div className="fade-up"
+            style={{ background:'linear-gradient(120deg,#f5f3ff,#eff6ff)', border:'1px solid #c7c3fa', borderRadius: 16, boxShadow:'var(--day-shadow)', padding: '20px 24px' }}>
             <div className="flex items-center gap-3 mb-5">
               <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
                 style={{ background:'var(--primary-soft)', border:'1px solid var(--primary-border)' }}>
@@ -230,17 +230,17 @@ export default function AnalysisPage() {
           </Card>
 
           {/* 비교표 */}
-          <div className="rounded-3xl overflow-hidden fade-up"
-            style={{ background:'var(--day-card)', border:'1px solid var(--day-border)', boxShadow:'var(--day-shadow)' }}>
-            <div className="px-5 sm:px-7 py-4 sm:py-5" style={{ borderBottom:'1px solid var(--day-border)' }}>
-              <p className="text-[15px] sm:text-[17px] font-extrabold" style={{ color:'var(--day-text1)' }}>월별 상세 비교</p>
+          <div className="fade-up overflow-hidden"
+            style={{ background:'var(--day-card)', border:'1px solid var(--day-border)', borderRadius: 16, boxShadow:'var(--day-shadow)' }}>
+            <div style={{ padding: '16px 24px', borderBottom:'1px solid var(--day-border)' }}>
+              <p style={{ fontSize: 15, fontWeight: 800, color:'var(--day-text1)' }}>월별 상세 비교</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px]">
                 <thead>
                   <tr style={{ borderBottom:'1px solid var(--day-border)', background:'var(--day-card2)' }}>
                     {['기간','수입','지출','잔액','수익률','고정비'].map(h=>(
-                      <th key={h} className={cn('py-4 text-[12px] sm:text-[13px] font-bold', h==='기간'?'text-left px-5 sm:px-7':'text-right px-4')}
+                      <th key={h} className={cn('py-3.5 text-[12px] font-bold', h==='기간'?'text-left px-6':'text-right px-4')}
                         style={{ color:'var(--day-text3)' }}>{h}</th>
                     ))}
                   </tr>
@@ -248,23 +248,23 @@ export default function AnalysisPage() {
                 <tbody>
                   {[...stats].reverse().map((s,i)=>(
                     <tr key={i} style={{ borderBottom:i<stats.length-1?'1px solid var(--day-border)':'none', background:i===0?'#f5f3ff':'transparent' }}>
-                      <td className="px-5 sm:px-7 py-3.5 sm:py-4">
+                      <td className="px-6 py-3.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-[13px] sm:text-[14px] font-bold" style={{ color:'var(--day-text1)' }}>{s.year}년 {s.month}월</span>
-                          {i===0&&<span className="text-[10px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-lg" style={{ background:'var(--primary-soft)', color:'var(--primary)' }}>이번달</span>}
+                          <span style={{ fontSize:13, fontWeight:700, color:'var(--day-text1)' }}>{s.year}년 {s.month}월</span>
+                          {i===0&&<span style={{ fontSize:10, fontWeight:800, padding:'2px 7px', borderRadius:5, background:'#eef0fe', color:'#4f46e5' }}>이번달</span>}
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 text-right text-[13px] sm:text-[14px] font-bold" style={{ color:'var(--income)' }}>{formatCurrency(s.totalIncome)}</td>
-                      <td className="px-4 py-3.5 text-right text-[13px] sm:text-[14px] font-bold" style={{ color:'var(--expense)' }}>{formatCurrency(s.totalExpense)}</td>
-                      <td className="px-4 py-3.5 text-right text-[13px] sm:text-[14px] font-extrabold" style={{ color:s.balance>=0?'var(--primary)':'var(--expense)' }}>{formatCurrency(s.balance)}</td>
-                      <td className="px-4 py-3.5 text-right text-[12px] sm:text-[13px] font-bold">
+                      <td className="px-4 py-3.5 text-right" style={{ fontSize:13, fontWeight:700, color:'#059669' }}>{formatCurrency(s.totalIncome)}</td>
+                      <td className="px-4 py-3.5 text-right" style={{ fontSize:13, fontWeight:700, color:'#dc2626' }}>{formatCurrency(s.totalExpense)}</td>
+                      <td className="px-4 py-3.5 text-right" style={{ fontSize:13, fontWeight:800, color:s.balance>=0?'#4f46e5':'#dc2626' }}>{formatCurrency(s.balance)}</td>
+                      <td className="px-4 py-3.5 text-right" style={{ fontSize:12, fontWeight:700 }}>
                         {s.totalIncome>0
-                          ?<span className="flex items-center justify-end gap-0.5" style={{ color:s.balance>=0?'var(--income)':'var(--expense)' }}>
+                          ?<span className="flex items-center justify-end gap-0.5" style={{ color:s.balance>=0?'#059669':'#dc2626' }}>
                             {s.balance<0&&<ArrowDownRight size={12}/>}{((s.balance/s.totalIncome)*100).toFixed(1)}%
                           </span>
                           :<span style={{ color:'var(--day-text3)' }}>—</span>}
                       </td>
-                      <td className="px-5 sm:px-7 py-3.5 text-right text-[13px] sm:text-[14px]" style={{ color:'var(--day-text2)' }}>{formatCurrency(s.fixedExpense)}</td>
+                      <td className="px-6 py-3.5 text-right" style={{ fontSize:13, color:'var(--day-text2)' }}>{formatCurrency(s.fixedExpense)}</td>
                     </tr>
                   ))}
                 </tbody>

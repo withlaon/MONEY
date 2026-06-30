@@ -10,63 +10,60 @@ import TransactionForm from '@/components/TransactionForm'
 
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-4 p-4 rounded-2xl" style={{ background: 'var(--day-card2)' }}>
-      <div className="skeleton w-11 h-11 flex-shrink-0" style={{ borderRadius: 14 }} />
+    <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl" style={{ background: 'var(--day-card2)' }}>
+      <div className="skeleton flex-shrink-0" style={{ width: 36, height: 36, borderRadius: 12 }} />
       <div className="flex-1 space-y-2">
-        <div className="skeleton h-4 w-3/5 rounded-lg" />
-        <div className="skeleton h-3 w-2/5 rounded-lg" />
+        <div className="skeleton h-3.5 rounded-lg" style={{ width: '55%' }} />
+        <div className="skeleton h-3 rounded-md" style={{ width: '35%' }} />
       </div>
-      <div className="skeleton h-5 w-24 rounded-lg flex-shrink-0" />
+      <div className="skeleton h-4 rounded-lg flex-shrink-0" style={{ width: 80 }} />
     </div>
   )
 }
 
+type Filter = 'all' | 'income' | 'expense'
+
 export default function TransactionsPage() {
   const { year: iy, month: im } = getCurrentYearMonth()
-  const [year, setYear]     = useState(iy)
-  const [month, setMonth]   = useState(im)
-  const [showForm, setShowForm]  = useState(false)
-  const [formType, setFormType]  = useState<'income'|'expense'>('income')
-  const [filterType, setFilterType] = useState<'all'|'income'|'expense'>('all')
+  const [year, setYear]   = useState(iy)
+  const [month, setMonth] = useState(im)
+  const [showForm, setShowForm] = useState(false)
+  const [formType, setFormType] = useState<'income'|'expense'>('income')
+  const [filter, setFilter]     = useState<Filter>('all')
 
   const { transactions, loading, addTransaction, deleteTransaction } = useTransactions(year, month)
   const openForm = (t: 'income'|'expense') => { setFormType(t); setShowForm(true) }
 
-  const filtered = filterType === 'all' ? transactions
-    : transactions.filter(t => t.transaction_type === filterType)
+  const filtered = filter === 'all' ? transactions : transactions.filter(t => t.transaction_type === filter)
 
-  const btn = (active: boolean) => ({
-    padding: '7px 18px',
-    borderRadius: 14,
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
-    background: active ? 'var(--primary)' : 'var(--day-card2)',
-    color: active ? '#fff' : 'var(--day-text2)',
-    border: active ? 'none' : '1px solid var(--day-border)',
-    transition: 'all 0.15s ease',
-  })
+  const filterTabs: { key: Filter; label: string }[] = [
+    { key: 'all',     label: '전체' },
+    { key: 'income',  label: '수입' },
+    { key: 'expense', label: '지출' },
+  ]
 
   return (
-    <div className="page-wrap space-y-6">
+    <div className="page-wrap" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── 헤더 ── */}
       <div className="fade-up">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-[26px] sm:text-[30px] font-extrabold" style={{ color: 'var(--day-text1)' }}>거래 내역</h1>
-            <p className="text-[14px] mt-1" style={{ color: 'var(--day-text3)' }}>{year}년 {month}월 전체 거래</p>
+            <h1 className="font-extrabold" style={{ fontSize: 26, color: 'var(--day-text1)' }}>거래 내역</h1>
+            <p style={{ fontSize: 13, color: 'var(--day-text3)', marginTop: 3 }}>
+              {year}년 {month}월 전체 거래 기록
+            </p>
           </div>
           <div className="hidden sm:flex items-center gap-2 pt-1">
             <button onClick={() => openForm('income')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[14px] font-bold"
-              style={{ background: 'var(--income-soft)', border: '1px solid var(--income-border)', color: 'var(--income)' }}>
-              <TrendingUp size={16} /> 수입 추가
+              className="flex items-center gap-2 font-bold"
+              style={{ fontSize: 13, padding: '8px 16px', borderRadius: 12, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669' }}>
+              <TrendingUp size={15}/> 수입 추가
             </button>
             <button onClick={() => openForm('expense')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[14px] font-bold"
-              style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary-border)', color: 'var(--primary-light)' }}>
-              <TrendingDown size={16} /> 지출 추가
+              className="flex items-center gap-2 font-bold"
+              style={{ fontSize: 13, padding: '8px 16px', borderRadius: 12, background: '#eef0fe', border: '1px solid #c7c3fa', color: '#4f46e5' }}>
+              <TrendingDown size={15}/> 지출 추가
             </button>
           </div>
         </div>
@@ -74,48 +71,58 @@ export default function TransactionsPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <MonthSelector year={year} month={month} onChange={(y,m) => { setYear(y); setMonth(m) }} />
           <div className="flex sm:hidden gap-2">
-            <button onClick={() => openForm('income')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold"
-              style={{ background:'var(--income-soft)', border:'1px solid var(--income-border)', color:'var(--income)' }}>
+            <button onClick={() => openForm('income')} className="flex items-center gap-1.5 font-bold"
+              style={{ fontSize: 13, padding: '7px 13px', borderRadius: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669' }}>
               <TrendingUp size={13}/> 수입
             </button>
-            <button onClick={() => openForm('expense')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold"
-              style={{ background:'var(--primary-soft)', border:'1px solid var(--primary-border)', color:'var(--primary-light)' }}>
+            <button onClick={() => openForm('expense')} className="flex items-center gap-1.5 font-bold"
+              style={{ fontSize: 13, padding: '7px 13px', borderRadius: 10, background: '#eef0fe', border: '1px solid #c7c3fa', color: '#4f46e5' }}>
               <TrendingDown size={13}/> 지출
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── 필터 탭 + 리스트 ── */}
-      <div className="day-card overflow-hidden fade-up">
-        <div className="flex items-center justify-between px-6 py-4 sm:px-8 sm:py-5"
-          style={{ borderBottom: '1px solid var(--day-border)' }}>
-          <div className="flex gap-2">
-            {(['all','income','expense'] as const).map(type => (
-              <button key={type} onClick={() => setFilterType(type)} style={btn(filterType === type)}>
-                {type === 'all' ? '전체' : type === 'income' ? '수입' : '지출'}
+      {/* ── 리스트 카드 ── */}
+      <div className="fade-up" style={{
+        background: 'var(--day-card)', border: '1px solid var(--day-border)',
+        borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--day-shadow)',
+      }}>
+        {/* 필터 탭 */}
+        <div className="flex items-center justify-between"
+          style={{ padding: '14px 24px', borderBottom: '1px solid var(--day-border)' }}>
+          <div className="flex items-center gap-1.5">
+            {filterTabs.map(tab => (
+              <button key={tab.key} onClick={() => setFilter(tab.key)}
+                className="font-bold transition-all"
+                style={{
+                  fontSize: 13, padding: '6px 14px', borderRadius: 10, cursor: 'pointer',
+                  background: filter === tab.key ? '#4f46e5' : 'transparent',
+                  color: filter === tab.key ? '#fff' : 'var(--day-text3)',
+                  border: filter === tab.key ? 'none' : '1px solid transparent',
+                }}>
+                {tab.label}
               </button>
             ))}
           </div>
           {!loading && (
-            <span className="text-[13px] font-bold" style={{ color:'var(--day-text3)' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--day-text3)' }}>
               {filtered.length}건
             </span>
           )}
         </div>
 
-        <div className="px-6 py-5 sm:px-8 sm:py-6">
+        {/* 리스트 */}
+        <div style={{ padding: '20px 24px' }}>
           {loading && !transactions.length ? (
-            <div className="space-y-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {Array.from({length:6}).map((_,i) => <SkeletonRow key={i} />)}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-16 text-center" style={{ color:'var(--day-text3)' }}>
-              <p className="text-[44px] mb-3">📋</p>
-              <p className="text-[16px] font-bold">거래 내역이 없습니다</p>
-              <p className="text-[13px] mt-1">위 버튼으로 수입 또는 지출을 추가해보세요</p>
+            <div className="text-center py-16">
+              <p style={{ fontSize: 36, marginBottom: 12 }}>📋</p>
+              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--day-text2)' }}>거래 내역이 없습니다</p>
+              <p style={{ fontSize: 13, marginTop: 4, color: 'var(--day-text3)' }}>위 버튼으로 추가하세요</p>
             </div>
           ) : (
             <TransactionList transactions={filtered} onDelete={deleteTransaction} />
@@ -123,15 +130,22 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      <div className="sm:hidden fixed bottom-[calc(var(--nav-h)+16px)] right-5 z-40">
+      {/* 모바일 FAB */}
+      <div className="sm:hidden fixed z-40" style={{ bottom: 'calc(var(--nav-h) + 16px)', right: 20 }}>
         <button onClick={() => openForm('income')}
-          className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center"
-          style={{ background: 'var(--primary)' }}>
-          <Plus size={24} color="#fff" />
+          className="flex items-center justify-center rounded-full shadow-xl"
+          style={{ width: 52, height: 52, background: '#4f46e5' }}>
+          <Plus size={22} color="#fff" />
         </button>
       </div>
 
-      {showForm && <TransactionForm defaultType={formType} onSubmit={async (d) => { await addTransaction(d) }} onClose={() => setShowForm(false)} />}
+      {showForm && (
+        <TransactionForm
+          defaultType={formType}
+          onSubmit={async (d) => { await addTransaction(d) }}
+          onClose={() => setShowForm(false)}
+        />
+      )}
     </div>
   )
 }
