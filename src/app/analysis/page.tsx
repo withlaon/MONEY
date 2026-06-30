@@ -84,7 +84,7 @@ export default function AnalysisPage() {
   )
 
   return (
-    <div className="w-full px-5 py-6 sm:px-8 sm:py-8 lg:px-10 space-y-5 sm:space-y-6">
+    <div className="page-wrap space-y-5 sm:space-y-6">
 
       {/* 헤더 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 fade-up">

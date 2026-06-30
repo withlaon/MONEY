@@ -13,8 +13,13 @@ interface Props {
 }
 
 const F: React.CSSProperties = {
-  width: '100%', background: 'var(--day-card2)', border: '1px solid var(--day-border)',
-  borderRadius: 12, padding: '11px 15px', fontSize: 15, color: 'var(--day-text1)',
+  width: '100%',
+  background: 'var(--day-card2)',
+  border: '1px solid var(--day-border)',
+  borderRadius: 14,
+  padding: '12px 16px',
+  fontSize: 15,
+  color: 'var(--day-text1)',
   transition: 'border-color 0.15s, box-shadow 0.15s',
 }
 
@@ -77,49 +82,56 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-6"
       onClick={onClose}
-      style={{ background: 'rgba(20,24,41,0.55)', backdropFilter: 'blur(8px)' }}
+      style={{ background: 'rgba(15,18,32,0.6)', backdropFilter: 'blur(10px)' }}
     >
       <div
-        className="relative w-full sm:max-w-lg scale-in"
+        className="relative w-full sm:max-w-xl scale-in"
         style={{
           background: 'var(--day-surface)',
           border: '1px solid var(--day-border)',
-          borderRadius: '24px 24px 0 0',
-          boxShadow: '0 -12px 48px rgba(60,80,160,0.16)',
+          /* 모바일: 위쪽만 둥글게 / 데스크탑: 완전 둥글게 */
+          borderRadius: 'clamp(20px, 3vw, 28px) clamp(20px, 3vw, 28px) 0 0',
+          boxShadow: 'var(--day-shadow-lg)',
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* 핸들 (모바일) */}
-        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+        <div className="flex justify-center pt-3.5 pb-1 sm:hidden">
           <div className="w-12 h-1.5 rounded-full" style={{ background: 'var(--day-border2)' }} />
         </div>
 
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--day-border)' }}>
-          <p className="text-[17px] sm:text-[18px] font-extrabold" style={{ color: 'var(--day-text1)' }}>거래 추가</p>
+        <div className="flex items-center justify-between px-7 py-5 sm:px-8 sm:py-5"
+          style={{ borderBottom: '1px solid var(--day-border)' }}>
+          <p className="text-[18px] sm:text-[20px] font-extrabold" style={{ color: 'var(--day-text1)' }}>
+            거래 추가
+          </p>
           <button onClick={onClose}
-            className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+            className="w-9 h-9 rounded-xl flex items-center justify-center"
             style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>
             <X size={15} />
           </button>
         </div>
 
-        <form onSubmit={submit} className="px-6 py-5 space-y-4 overflow-y-auto" style={{ maxHeight: '80vh' }}>
+        <form onSubmit={submit}
+          className="px-7 py-6 sm:px-8 sm:py-7 space-y-5 overflow-y-auto"
+          style={{ maxHeight: 'min(78vh, 680px)' }}>
 
-          {/* 타입 */}
-          <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl" style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)' }}>
+          {/* 수입/지출 탭 */}
+          <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl"
+            style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)' }}>
             {(['income','expense'] as const).map(t => (
               <button key={t} type="button" onClick={() => setType(t)}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-bold transition-all"
+                className="flex items-center justify-center gap-2 py-3 rounded-xl text-[15px] font-bold transition-all"
                 style={{
                   background: type===t ? (t==='income' ? 'var(--income-soft)' : 'var(--expense-soft)') : 'transparent',
                   border: `1px solid ${type===t ? (t==='income' ? 'var(--income-border)' : 'var(--expense-border)') : 'transparent'}`,
                   color: type===t ? (t==='income' ? 'var(--income)' : 'var(--expense)') : 'var(--day-text3)',
                   boxShadow: type===t ? 'var(--day-shadow)' : 'none',
                 }}>
-                {t==='income' ? <TrendingUp size={16}/> : <TrendingDown size={16}/>}
+                {t==='income' ? <TrendingUp size={17}/> : <TrendingDown size={17}/>}
                 {t==='income' ? '수입' : '지출'}
               </button>
             ))}
@@ -129,10 +141,10 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
           <div>
             <Label t="금액 *" />
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[15px] font-bold" style={{ color: 'var(--day-text3)' }}>₩</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[16px] font-extrabold" style={{ color: 'var(--day-text3)' }}>₩</span>
               <input type="text" value={amount} onChange={e => setAmount(fmt(e.target.value))}
-                placeholder="0" style={{ ...F, paddingLeft: 36 }} required
-                className="focus:border-[var(--primary)] focus:shadow-[0_0_0_3px_rgba(91,77,212,0.1)]" />
+                placeholder="0" style={{ ...F, paddingLeft: 38 }} required
+                className="focus:border-[var(--primary)] focus:shadow-[0_0_0_3px_rgba(80,70,228,0.1)]" />
             </div>
           </div>
 
@@ -163,19 +175,19 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                     {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                   <button type="button" onClick={() => setAddSrc(true)}
-                    className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary-border)', color: 'var(--primary-light)' }}>
-                    <Plus size={16}/>
+                    <Plus size={17}/>
                   </button>
                 </div>
               ) : (
                 <div className="flex gap-2">
                   <input autoFocus value={newSrc} onChange={e => setNewSrc(e.target.value)} placeholder="새 입금처 이름"
                     style={{ ...F, flex:1, borderColor:'var(--primary)' }} onKeyDown={e => e.key==='Enter' && doSrc()}/>
-                  <button type="button" onClick={doSrc} className="px-4 py-2.5 rounded-xl text-[14px] font-bold"
+                  <button type="button" onClick={doSrc} className="px-4 rounded-xl text-[14px] font-bold"
                     style={{ background: 'var(--primary)', color: 'white' }}>추가</button>
                   <button type="button" onClick={() => {setAddSrc(false);setNewSrc('')}}
-                    className="px-3 py-2.5 rounded-xl text-[13px] font-medium"
+                    className="px-3 rounded-xl text-[13px]"
                     style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>취소</button>
                 </div>
               )}
@@ -187,10 +199,10 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
             <>
               <div>
                 <Label t="지출 구분" />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   {(['office','personal'] as const).map(et => (
                     <button key={et} type="button" onClick={() => { setExpType(et); setCatId('') }}
-                      className="flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-bold border transition-all"
+                      className="flex items-center justify-center gap-2 py-3.5 rounded-xl text-[14px] font-bold border transition-all"
                       style={{
                         background: expType===et ? (et==='office' ? 'var(--office-soft)' : 'var(--personal-soft)') : 'var(--day-card2)',
                         border: `1px solid ${expType===et ? (et==='office' ? 'var(--office-border)' : 'var(--personal-border)') : 'var(--day-border)'}`,
@@ -214,9 +226,9 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                       {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                     <button type="button" onClick={() => setAddCat(true)}
-                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
                       style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary-border)', color: 'var(--primary-light)' }}>
-                      <Plus size={16}/>
+                      <Plus size={17}/>
                     </button>
                   </div>
                 ) : (
@@ -224,17 +236,17 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                     <input autoFocus value={newCat} onChange={e => setNewCat(e.target.value)}
                       placeholder={`새 ${expType==='office'?'사무실':'개인'} 카테고리`}
                       style={{ ...F, flex:1, borderColor:'var(--primary)' }} onKeyDown={e => e.key==='Enter' && doCat()}/>
-                    <button type="button" onClick={doCat} className="px-4 py-2.5 rounded-xl text-[14px] font-bold"
+                    <button type="button" onClick={doCat} className="px-4 rounded-xl text-[14px] font-bold"
                       style={{ background: 'var(--primary)', color: 'white' }}>추가</button>
                     <button type="button" onClick={() => {setAddCat(false);setNewCat('')}}
-                      className="px-3 py-2.5 rounded-xl text-[13px] font-medium"
+                      className="px-3 rounded-xl text-[13px]"
                       style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>취소</button>
                   </div>
                 )}
               </div>
 
               <button type="button" onClick={() => setFixed(!fixed)}
-                className="w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl border text-[14px] font-semibold transition-all"
+                className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-[14px] font-bold transition-all"
                 style={{
                   background: fixed ? 'var(--fixed-soft)' : 'var(--day-card2)',
                   border: `1px solid ${fixed ? 'var(--fixed-border)' : 'var(--day-border)'}`,
@@ -242,7 +254,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                 }}>
                 {fixed ? <Lock size={16}/> : <Unlock size={16}/>}
                 <span>{fixed ? '고정비 (매달 반복)' : '변동비 (비정기 지출)'}</span>
-                <span className="ml-auto text-[12px] opacity-50">{fixed ? '→ 변동비로' : '→ 고정비로'}</span>
+                <span className="ml-auto text-[12px] opacity-40">{fixed ? '→ 변동비로' : '→ 고정비로'}</span>
               </button>
             </>
           )}
@@ -250,8 +262,9 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
           {/* 메모 */}
           <div>
             <Label t="메모" />
-            <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder="추가 메모 (선택사항)"
-              rows={2} style={{ ...F, resize: 'none' }} className="focus:border-[var(--primary)]" />
+            <textarea value={memo} onChange={e => setMemo(e.target.value)}
+              placeholder="추가 메모 (선택사항)" rows={2}
+              style={{ ...F, resize: 'none' }} className="focus:border-[var(--primary)]" />
           </div>
 
           {error && (
@@ -263,19 +276,19 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
 
           <div className="flex gap-3 pt-1 pb-2">
             <button type="button" onClick={onClose}
-              className="flex-1 py-3.5 rounded-2xl text-[15px] font-semibold"
+              className="flex-1 py-4 rounded-2xl text-[15px] font-bold"
               style={{ background: 'var(--day-card2)', border: '1px solid var(--day-border)', color: 'var(--day-text2)' }}>
               취소
             </button>
             <button type="submit" disabled={loading}
-              className={cn('flex-1 py-3.5 rounded-2xl text-[15px] font-extrabold text-white', loading && 'opacity-60 cursor-not-allowed')}
+              className={cn('flex-1 py-4 rounded-2xl text-[15px] font-extrabold text-white', loading && 'opacity-60 cursor-not-allowed')}
               style={{
                 background: type==='income'
-                  ? 'linear-gradient(135deg, #059669, #10b981)'
-                  : 'linear-gradient(135deg, #5b4dd4, #7c6fe0)',
+                  ? 'linear-gradient(135deg, #047857, #10b981)'
+                  : 'linear-gradient(135deg, #5046e4, #7c72f0)',
                 boxShadow: type==='income'
-                  ? '0 4px 16px rgba(5,150,105,0.3)'
-                  : '0 4px 16px rgba(91,77,212,0.35)',
+                  ? '0 4px 16px rgba(4,120,87,0.28)'
+                  : '0 4px 16px rgba(80,70,228,0.32)',
               }}>
               {loading ? '저장 중...' : '저장하기'}
             </button>

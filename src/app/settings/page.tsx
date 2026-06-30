@@ -93,7 +93,7 @@ export default function SettingsPage() {
   )
 
   return (
-    <div className="w-full px-5 py-6 sm:px-8 sm:py-8 lg:px-10 space-y-5 sm:space-y-6">
+    <div className="page-wrap space-y-5 sm:space-y-6">
 
       <div className="fade-up">
         <h1 className="text-[24px] sm:text-[28px] font-extrabold tracking-tight" style={{ color:'var(--day-text1)' }}>설정</h1>
