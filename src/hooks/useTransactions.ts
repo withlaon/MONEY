@@ -63,16 +63,18 @@ export function useTransactions(year: number, month: number) {
   const addTransaction = async (
     t: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>
   ) => {
-    const data = await serverAddTransaction(t)
-    const updated = [data as unknown as Transaction, ...transactions]
+    const result = await serverAddTransaction(t)
+    if (result.error) throw new Error(result.error)
+    const updated = [result.data as unknown as Transaction, ...transactions]
     cache.set(key, updated)
     setTransactions(updated)
-    return data
+    return result.data
   }
 
   /* 거래 삭제 — Server Action */
   const deleteTransaction = async (id: string) => {
-    await serverDeleteTransaction(id)
+    const result = await serverDeleteTransaction(id)
+    if (result.error) throw new Error(result.error)
     const updated = transactions.filter(t => t.id !== id)
     cache.set(key, updated)
     setTransactions(updated)
@@ -115,7 +117,9 @@ export function useIncomeSources() {
 
   /* 입금처 추가 — Server Action (한글 지원) */
   const addSource = async (name: string, description?: string) => {
-    const newItem = await serverAddIncomeSource(name, description ?? null) as IncomeSource
+    const result = await serverAddIncomeSource(name, description ?? null)
+    if (result.error) throw new Error(result.error)
+    const newItem = result.data as IncomeSource
     srcCache = [...(srcCache ?? []), newItem]
     setSources([...srcCache])
     return newItem
@@ -145,7 +149,9 @@ export function useExpenseCategories() {
 
   /* 카테고리 추가 — Server Action (한글 지원) */
   const addCategory = async (name: string, type: 'office'|'personal', description?: string) => {
-    const newItem = await serverAddExpenseCategory(name, type, description ?? null) as ExpenseCategory
+    const result = await serverAddExpenseCategory(name, type, description ?? null)
+    if (result.error) throw new Error(result.error)
+    const newItem = result.data as ExpenseCategory
     catCache = [...(catCache ?? []), newItem]
     setCategories([...catCache])
     return newItem
