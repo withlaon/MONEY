@@ -25,15 +25,14 @@ export async function serverAddIncomeSource(
 ): Promise<ActionResult<{ id: string; name: string; description: string | null; is_active: boolean }>> {
   try {
     const sb = makeClient()
-    const { data, error } = await sb
+    const { data: rows, error } = await sb
       .from('income_sources')
       .insert({ name, description })
       .select('id, name, description, is_active')
-      .single()
 
     if (error) return { data: null, error: error.message }
-    if (!data) return { data: null, error: '입금처 저장 실패' }
-    return { data, error: null }
+    if (!rows || rows.length === 0) return { data: null, error: '입금처 저장 실패' }
+    return { data: rows[0] as { id: string; name: string; description: string | null; is_active: boolean }, error: null }
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : '알 수 없는 오류' }
   }
@@ -47,15 +46,14 @@ export async function serverAddExpenseCategory(
 ): Promise<ActionResult<{ id: string; name: string; type: 'office' | 'personal'; description: string | null; is_active: boolean }>> {
   try {
     const sb = makeClient()
-    const { data, error } = await sb
+    const { data: rows, error } = await sb
       .from('expense_categories')
       .insert({ name, type, description })
       .select('id, name, type, description, is_active')
-      .single()
 
     if (error) return { data: null, error: error.message }
-    if (!data) return { data: null, error: '카테고리 저장 실패' }
-    return { data, error: null }
+    if (!rows || rows.length === 0) return { data: null, error: '카테고리 저장 실패' }
+    return { data: rows[0] as { id: string; name: string; type: 'office' | 'personal'; description: string | null; is_active: boolean }, error: null }
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : '알 수 없는 오류' }
   }

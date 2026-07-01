@@ -108,8 +108,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
     setCatSaving(true); setCatErr('')
     try {
       const c = await addCategory(newCat.trim(), expType)
-      if (!c || !c.id) throw new Error('카테고리 저장 실패')
-      setCatId(c.id)
+      setCatId(c?.id ?? '')
       setNewCat('')
       setAddCat(false)
     } catch (e: unknown) {

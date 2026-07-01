@@ -120,8 +120,12 @@ export function useIncomeSources() {
     const result = await serverAddIncomeSource(name, description ?? null)
     if (result.error) throw new Error(result.error)
     const newItem = result.data as IncomeSource
-    srcCache = [...(srcCache ?? []), newItem]
-    setSources([...srcCache])
+    /* 함수형 업데이트: 최신 상태 기반으로 추가 (stale closure 방지) */
+    setSources(prev => {
+      const next = [...prev, newItem]
+      srcCache = next
+      return next
+    })
     return newItem
   }
 
@@ -152,8 +156,12 @@ export function useExpenseCategories() {
     const result = await serverAddExpenseCategory(name, type, description ?? null)
     if (result.error) throw new Error(result.error)
     const newItem = result.data as ExpenseCategory
-    catCache = [...(catCache ?? []), newItem]
-    setCategories([...catCache])
+    /* 함수형 업데이트: 최신 상태 기반으로 추가 (stale closure 방지) */
+    setCategories(prev => {
+      const next = [...prev, newItem]
+      catCache = next
+      return next
+    })
     return newItem
   }
 
