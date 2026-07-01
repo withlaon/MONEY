@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase, Transaction, IncomeSource, ExpenseCategory, MonthlyStats } from '@/lib/supabase'
+import { pgGet } from '@/lib/pgFetch'
+import { Transaction, IncomeSource, ExpenseCategory, MonthlyStats } from '@/lib/supabase'
 import { getMonthRange } from '@/lib/utils'
 
 // 인메모리 캐시
@@ -26,26 +27,26 @@ export function useTransactions(year: number, month: number) {
     abortRef.current = new AbortController()
 
     const { start, end } = getMonthRange(year, month)
-    const { data, error: err } = await supabase
-      .from('transactions')
-      .select(`
-        id, transaction_type, amount, transaction_date,
-        description, memo, expense_type, is_fixed, payment_method,
-        income_source_id, expense_category_id,
-        income_sources(id, name),
-        expense_categories(id, name, type)
-      `)
-      .gte('transaction_date', start)
-      .lte('transaction_date', end)
-      .order('transaction_date', { ascending: false })
+    const sel = [
+      'id', 'transaction_type', 'amount', 'transaction_date',
+      'description', 'memo', 'expense_type', 'is_fixed', 'payment_method',
+      'income_source_id', 'expense_category_id',
+      'income_sources(id,name)',
+      'expense_categories(id,name,type)',
+    ].join(',')
+    const q = `select=${sel}&transaction_date=gte.${start}&transaction_date=lte.${end}&order=transaction_date.desc`
 
-    if (err) { setError(err.message) }
-    else {
-      const result = (data || []) as unknown as Transaction[]
+    try {
+      const result = await pgGet<Transaction>(
+        'transactions', q
+      )
       cache.set(key, result)
       setTransactions(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '데이터 로드 실패')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [year, month, key])
 
   useEffect(() => {
@@ -53,7 +54,7 @@ export function useTransactions(year: number, month: number) {
     return () => { abortRef.current?.abort() }
   }, [fetchTransactions])
 
-  /* 거래 추가 — API Route (한글 안전) */
+  /* 거래 추가 — API Route */
   const addTransaction = async (
     t: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>
   ) => {
@@ -107,15 +108,17 @@ export function useIncomeSources() {
 
   useEffect(() => {
     if (srcCache) { setSources(srcCache); setLoading(false); return }
-    supabase.from('income_sources').select('*').eq('is_active', true).order('name')
-      .then(({ data }) => {
-        srcCache = (data || []) as IncomeSource[]
-        setSources([...srcCache])
-        setLoading(false)
-      })
+    pgGet<IncomeSource>(
+      'income_sources',
+      'select=*&is_active=eq.true&order=name'
+    ).then(data => {
+      srcCache = data
+      setSources([...data])
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
 
-  /* 입금처 추가 — API Route (한글 안전) */
+  /* 입금처 추가 — API Route */
   const addSource = async (name: string, description?: string) => {
     const res = await fetch('/api/income-sources', {
       method: 'POST',
@@ -147,15 +150,17 @@ export function useExpenseCategories() {
 
   useEffect(() => {
     if (catCache) { setCategories(catCache); setLoading(false); return }
-    supabase.from('expense_categories').select('*').eq('is_active', true).order('type')
-      .then(({ data }) => {
-        catCache = (data || []) as ExpenseCategory[]
-        setCategories([...catCache])
-        setLoading(false)
-      })
+    pgGet<ExpenseCategory>(
+      'expense_categories',
+      'select=*&is_active=eq.true&order=type'
+    ).then(data => {
+      catCache = data
+      setCategories([...data])
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
 
-  /* 카테고리 추가 — API Route (한글 안전) */
+  /* 카테고리 추가 — API Route */
   const addCategory = async (name: string, type: 'office'|'personal', description?: string) => {
     const res = await fetch('/api/expense-categories', {
       method: 'POST',
@@ -197,13 +202,11 @@ export function useMonthlyStats(months: { year: number; month: number }[]) {
 
     Promise.all(missing.map(async ({ year, month }) => {
       const { start, end } = getMonthRange(year, month)
-      const { data } = await supabase
-        .from('transactions')
-        .select('transaction_type, amount, expense_type, is_fixed')
-        .gte('transaction_date', start)
-        .lte('transaction_date', end)
+      const rows = await pgGet<{ transaction_type: string; amount: number; expense_type: string | null; is_fixed: boolean }>(
+        'transactions',
+        `select=transaction_type,amount,expense_type,is_fixed&transaction_date=gte.${start}&transaction_date=lte.${end}`
+      )
 
-      const rows = data || []
       const s: MonthlyStats = {
         year, month,
         totalIncome:     rows.filter(t => t.transaction_type === 'income').reduce((s, t) => s + t.amount, 0),

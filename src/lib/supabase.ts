@@ -1,9 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Supabase JS 클라이언트는 ByteString 헤더 오류로 인해 사용하지 않습니다.
+// 모든 DB 통신은 src/lib/pgFetch.ts (직접 fetch) 또는 src/app/api/ (API Routes)를 사용합니다.
 
 // 타입 정의
 export interface IncomeSource {
