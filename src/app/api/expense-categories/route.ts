@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { pgInsert } from '../_supabase'
+import { pgGet, pgInsert } from '../_supabase'
+
+export async function GET() {
+  try {
+    const rows = await pgGet<{ id: string; name: string; type: string; description: string | null; is_active: boolean }>(
+      'expense_categories', 'select=*&is_active=eq.true&order=type'
+    )
+    return NextResponse.json({ data: rows })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : '알 수 없는 오류' }, { status: 500 })
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {

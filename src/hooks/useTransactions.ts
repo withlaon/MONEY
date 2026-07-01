@@ -1,9 +1,10 @@
 'use client'
 
+/* 브라우저는 오직 /api/* 경로만 호출 — 외부 Supabase URL에 직접 접근 없음
+   → 헤더에 한글이 들어갈 가능성 구조적으로 차단 */
+
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { pgGet } from '@/lib/pgFetch'
 import { Transaction, IncomeSource, ExpenseCategory, MonthlyStats } from '@/lib/supabase'
-import { getMonthRange } from '@/lib/utils'
 
 // 인메모리 캐시
 const cache = new Map<string, Transaction[]>()
@@ -26,24 +27,19 @@ export function useTransactions(year: number, month: number) {
     abortRef.current?.abort()
     abortRef.current = new AbortController()
 
-    const { start, end } = getMonthRange(year, month)
-    const sel = [
-      'id', 'transaction_type', 'amount', 'transaction_date',
-      'description', 'memo', 'expense_type', 'is_fixed', 'payment_method',
-      'income_source_id', 'expense_category_id',
-      'income_sources(id,name)',
-      'expense_categories(id,name,type)',
-    ].join(',')
-    const q = `select=${sel}&transaction_date=gte.${start}&transaction_date=lte.${end}&order=transaction_date.desc`
-
     try {
-      const result = await pgGet<Transaction>(
-        'transactions', q
-      )
-      cache.set(key, result)
-      setTransactions(result)
+      const res = await fetch(`/api/transactions?year=${year}&month=${month}`, {
+        signal: abortRef.current.signal,
+      })
+      const result = await res.json() as { data?: Transaction[]; error?: string }
+      if (!res.ok || result.error) throw new Error(result.error || '데이터 로드 실패')
+      const data = result.data || []
+      cache.set(key, data)
+      setTransactions(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '데이터 로드 실패')
+      if ((err as Error).name !== 'AbortError') {
+        setError(err instanceof Error ? err.message : '데이터 로드 실패')
+      }
     } finally {
       setLoading(false)
     }
@@ -54,7 +50,7 @@ export function useTransactions(year: number, month: number) {
     return () => { abortRef.current?.abort() }
   }, [fetchTransactions])
 
-  /* 거래 추가 — API Route */
+  /* 거래 추가 */
   const addTransaction = async (
     t: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>
   ) => {
@@ -71,9 +67,9 @@ export function useTransactions(year: number, month: number) {
     return result.data
   }
 
-  /* 거래 삭제 — API Route */
+  /* 거래 삭제 */
   const deleteTransaction = async (id: string) => {
-    const res = await fetch(`/api/transactions?id=${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/transactions?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
     const result = await res.json() as { error?: string }
     if (!res.ok || result.error) throw new Error(result.error || '거래 삭제 실패')
     const updated = transactions.filter(t => t.id !== id)
@@ -108,17 +104,17 @@ export function useIncomeSources() {
 
   useEffect(() => {
     if (srcCache) { setSources(srcCache); setLoading(false); return }
-    pgGet<IncomeSource>(
-      'income_sources',
-      'select=*&is_active=eq.true&order=name'
-    ).then(data => {
-      srcCache = data
-      setSources([...data])
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    fetch('/api/income-sources')
+      .then(r => r.json() as Promise<{ data?: IncomeSource[]; error?: string }>)
+      .then(result => {
+        srcCache = result.data || []
+        setSources([...srcCache])
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
-  /* 입금처 추가 — API Route */
+  /* 입금처 추가 */
   const addSource = async (name: string, description?: string) => {
     const res = await fetch('/api/income-sources', {
       method: 'POST',
@@ -150,17 +146,17 @@ export function useExpenseCategories() {
 
   useEffect(() => {
     if (catCache) { setCategories(catCache); setLoading(false); return }
-    pgGet<ExpenseCategory>(
-      'expense_categories',
-      'select=*&is_active=eq.true&order=type'
-    ).then(data => {
-      catCache = data
-      setCategories([...data])
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    fetch('/api/expense-categories')
+      .then(r => r.json() as Promise<{ data?: ExpenseCategory[]; error?: string }>)
+      .then(result => {
+        catCache = result.data || []
+        setCategories([...catCache])
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
-  /* 카테고리 추가 — API Route */
+  /* 카테고리 추가 */
   const addCategory = async (name: string, type: 'office'|'personal', description?: string) => {
     const res = await fetch('/api/expense-categories', {
       method: 'POST',
@@ -201,11 +197,13 @@ export function useMonthlyStats(months: { year: number; month: number }[]) {
     setLoading(true)
 
     Promise.all(missing.map(async ({ year, month }) => {
-      const { start, end } = getMonthRange(year, month)
-      const rows = await pgGet<{ transaction_type: string; amount: number; expense_type: string | null; is_fixed: boolean }>(
-        'transactions',
-        `select=transaction_type,amount,expense_type,is_fixed&transaction_date=gte.${start}&transaction_date=lte.${end}`
-      )
+      const y = year, mo = month
+      const start = `${y}-${String(mo).padStart(2,'0')}-01`
+      const lastDay = new Date(y, mo, 0).getDate()
+      const end   = `${y}-${String(mo).padStart(2,'0')}-${lastDay}`
+      const res = await fetch(`/api/transactions?start=${start}&end=${end}`)
+      const result = await res.json() as { data?: Record<string, unknown>[] }
+      const rows = (result.data || []) as { transaction_type: string; amount: number; expense_type: string | null; is_fixed: boolean }[]
 
       const s: MonthlyStats = {
         year, month,

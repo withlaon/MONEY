@@ -13,6 +13,19 @@ export function authHeaders(extra?: Record<string, string>) {
   }
 }
 
+/* SELECT */
+export async function pgGet<T>(table: string, query: string): Promise<T[]> {
+  const res = await fetch(`${SUPA_URL}/rest/v1/${table}?${query}`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>
+    throw new Error(err.message ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<T[]>
+}
+
+/* INSERT → return representation */
 export async function pgInsert<T>(
   table: string,
   select: string,
@@ -28,6 +41,7 @@ export async function pgInsert<T>(
   return json as T[]
 }
 
+/* DELETE */
 export async function pgDelete(table: string, id: string): Promise<void> {
   const res = await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, {
     method: 'DELETE',
