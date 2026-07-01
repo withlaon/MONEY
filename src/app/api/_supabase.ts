@@ -1,10 +1,19 @@
 /* 서버 전용 PostgREST 헬퍼
    모든 한글 데이터는 JSON body에만 담기므로 ByteString 에러 없음 */
 
-export const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-export const SUPA_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+/* 환경변수에서 ASCII 범위(0x20–0x7E) 외 문자를 제거
+   → Vercel에서 키 복사 시 비ASCII 문자가 섞여도 안전 */
+function ascii(s: string | undefined): string {
+  return (s ?? '').trim().replace(/[^\x20-\x7E]/g, '')
+}
+
+export const SUPA_URL = ascii(process.env.NEXT_PUBLIC_SUPABASE_URL)
+export const SUPA_KEY = ascii(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 
 export function authHeaders(extra?: Record<string, string>) {
+  if (!SUPA_URL || !SUPA_KEY) {
+    throw new Error('Supabase 환경변수(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY)가 설정되지 않았습니다.')
+  }
   return {
     apikey: SUPA_KEY,
     Authorization: `Bearer ${SUPA_KEY}`,
