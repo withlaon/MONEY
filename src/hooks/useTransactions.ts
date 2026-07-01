@@ -3,12 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, Transaction, IncomeSource, ExpenseCategory, MonthlyStats } from '@/lib/supabase'
 import { getMonthRange } from '@/lib/utils'
-import {
-  serverAddIncomeSource,
-  serverAddExpenseCategory,
-  serverAddTransaction,
-  serverDeleteTransaction,
-} from '@/app/actions'
 
 // 인메모리 캐시
 const cache = new Map<string, Transaction[]>()
@@ -36,7 +30,7 @@ export function useTransactions(year: number, month: number) {
       .from('transactions')
       .select(`
         id, transaction_type, amount, transaction_date,
-        description, memo, expense_type, is_fixed,
+        description, memo, expense_type, is_fixed, payment_method,
         income_source_id, expense_category_id,
         income_sources(id, name),
         expense_categories(id, name, type)
@@ -59,22 +53,28 @@ export function useTransactions(year: number, month: number) {
     return () => { abortRef.current?.abort() }
   }, [fetchTransactions])
 
-  /* 거래 추가 — Server Action (한글 지원) */
+  /* 거래 추가 — API Route (한글 안전) */
   const addTransaction = async (
     t: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>
   ) => {
-    const result = await serverAddTransaction(t)
-    if (result.error) throw new Error(result.error)
+    const res = await fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(t),
+    })
+    const result = await res.json() as { data?: Record<string, unknown>; error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '거래 저장 실패')
     const updated = [result.data as unknown as Transaction, ...transactions]
     cache.set(key, updated)
     setTransactions(updated)
     return result.data
   }
 
-  /* 거래 삭제 — Server Action */
+  /* 거래 삭제 — API Route */
   const deleteTransaction = async (id: string) => {
-    const result = await serverDeleteTransaction(id)
-    if (result.error) throw new Error(result.error)
+    const res = await fetch(`/api/transactions?id=${id}`, { method: 'DELETE' })
+    const result = await res.json() as { error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '거래 삭제 실패')
     const updated = transactions.filter(t => t.id !== id)
     cache.set(key, updated)
     setTransactions(updated)
@@ -115,12 +115,16 @@ export function useIncomeSources() {
       })
   }, [])
 
-  /* 입금처 추가 — Server Action (한글 지원) */
+  /* 입금처 추가 — API Route (한글 안전) */
   const addSource = async (name: string, description?: string) => {
-    const result = await serverAddIncomeSource(name, description ?? null)
-    if (result.error) throw new Error(result.error)
+    const res = await fetch('/api/income-sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description: description ?? null }),
+    })
+    const result = await res.json() as { data?: IncomeSource; error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '입금처 저장 실패')
     const newItem = result.data as IncomeSource
-    /* 함수형 업데이트: 최신 상태 기반으로 추가 (stale closure 방지) */
     setSources(prev => {
       const next = [...prev, newItem]
       srcCache = next
@@ -151,12 +155,16 @@ export function useExpenseCategories() {
       })
   }, [])
 
-  /* 카테고리 추가 — Server Action (한글 지원) */
+  /* 카테고리 추가 — API Route (한글 안전) */
   const addCategory = async (name: string, type: 'office'|'personal', description?: string) => {
-    const result = await serverAddExpenseCategory(name, type, description ?? null)
-    if (result.error) throw new Error(result.error)
+    const res = await fetch('/api/expense-categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, type, description: description ?? null }),
+    })
+    const result = await res.json() as { data?: ExpenseCategory; error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '카테고리 저장 실패')
     const newItem = result.data as ExpenseCategory
-    /* 함수형 업데이트: 최신 상태 기반으로 추가 (stale closure 방지) */
     setCategories(prev => {
       const next = [...prev, newItem]
       catCache = next

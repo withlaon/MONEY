@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { X, Plus, TrendingUp, TrendingDown, Building2, User, Lock, Zap, Check } from 'lucide-react'
+import { X, Plus, TrendingUp, TrendingDown, Building2, User, Lock, Zap, Check, CreditCard, Banknote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Transaction } from '@/lib/supabase'
 import { useIncomeSources, useExpenseCategories } from '@/hooks/useTransactions'
+
+const PAYMENT_METHODS = ['현금', '삼성카드', 'KB카드', '현대카드'] as const
 
 interface Props {
   onSubmit: (d: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>) => Promise<void>
@@ -35,6 +37,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
   const [catId,   setCatId]   = useState('')
   const [expType, setExpType] = useState<'office'|'personal'>('office')
   const [fixed,   setFixed]   = useState(false)
+  const [payMethod, setPayMethod] = useState<string>('')
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
 
@@ -72,6 +75,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
         transaction_date: date,
         description: desc || null,
         memo: memo || null,
+        payment_method: payMethod || null,
         income_source_id:    type === 'income'  ? (srcId || null) : null,
         expense_category_id: type === 'expense' ? (catId || null) : null,
         expense_type: type === 'expense' ? expType : null,
@@ -220,6 +224,38 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                 required
                 style={{ ...INP, paddingLeft: 34 }}
               />
+            </div>
+          </div>
+
+          {/* 결제수단 */}
+          <div>
+            <Label t="결제수단" />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {PAYMENT_METHODS.map(pm => {
+                const isActive = payMethod === pm
+                const isCash = pm === '현금'
+                return (
+                  <button
+                    key={pm}
+                    type="button"
+                    onClick={() => setPayMethod(isActive ? '' : pm)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700,
+                      cursor: 'pointer', transition: 'all 0.12s',
+                      background: isActive ? (isCash ? '#ecfdf5' : '#eef0fe') : '#f3f4f6',
+                      border: `1.5px solid ${isActive ? (isCash ? '#6ee7b7' : '#c7c3fa') : '#e5e7eb'}`,
+                      color: isActive ? (isCash ? '#047857' : '#4f46e5') : '#6b7280',
+                    }}
+                  >
+                    {isCash
+                      ? <Banknote size={13} />
+                      : <CreditCard size={13} />
+                    }
+                    {pm}
+                  </button>
+                )
+              })}
             </div>
           </div>
 

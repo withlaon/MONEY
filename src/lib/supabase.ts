@@ -32,6 +32,7 @@ export interface Transaction {
   transaction_date: string
   description: string | null
   memo: string | null
+  payment_method: string | null
   income_source_id: string | null
   expense_category_id: string | null
   expense_type: 'office' | 'personal' | null

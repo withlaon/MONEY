@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   transaction_date DATE NOT NULL,
   description TEXT,
   memo TEXT,
+  payment_method VARCHAR(50),
   income_source_id UUID REFERENCES income_sources(id) ON DELETE SET NULL,
   expense_category_id UUID REFERENCES expense_categories(id) ON DELETE SET NULL,
   expense_type VARCHAR(20) CHECK (expense_type IN ('office', 'personal')),
@@ -36,6 +37,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 기존 테이블에 결제수단 컬럼 추가 (이미 테이블이 있는 경우)
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);
 
 -- 월별 예산 목표 테이블
 CREATE TABLE IF NOT EXISTS monthly_budgets (
