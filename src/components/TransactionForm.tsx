@@ -74,7 +74,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
         transaction_date: date,
         description: desc || null,
         memo: memo || null,
-        payment_method: payMethod || null,
+        payment_method: type === 'expense' ? (payMethod || null) : null,
         income_source_id:    type === 'income'  ? (srcId || null) : null,
         expense_category_id: type === 'expense' ? (catId || null) : null,
         expense_type: type === 'expense' ? expType : null,
@@ -226,38 +226,6 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
             </div>
           </div>
 
-          {/* 결제수단 */}
-          <div>
-            <Label t="결제수단" />
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {PAYMENT_METHODS.map(pm => {
-                const isActive = payMethod === pm
-                const isCash = pm === '현금'
-                return (
-                  <button
-                    key={pm}
-                    type="button"
-                    onClick={() => setPayMethod(isActive ? '' : pm)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700,
-                      cursor: 'pointer', transition: 'all 0.12s',
-                      background: isActive ? (isCash ? '#ecfdf5' : '#eef0fe') : '#f3f4f6',
-                      border: `1.5px solid ${isActive ? (isCash ? '#6ee7b7' : '#c7c3fa') : '#e5e7eb'}`,
-                      color: isActive ? (isCash ? '#047857' : '#4f46e5') : '#6b7280',
-                    }}
-                  >
-                    {isCash
-                      ? <Banknote size={13} />
-                      : <CreditCard size={13} />
-                    }
-                    {pm}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           {/* 날짜 */}
           <div>
             <Label t="날짜 *" />
@@ -365,6 +333,35 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                 <p style={{ fontSize:11, color:'#9ca3af', marginTop:6 }}>
                   {fixed ? '매월 반복되는 고정 지출 (임대료, 구독료 등)' : '비정기적인 변동 지출'}
                 </p>
+              </div>
+
+              {/* 결제수단 */}
+              <div>
+                <Label t="결제수단" />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {PAYMENT_METHODS.map(pm => {
+                    const isActive = payMethod === pm
+                    const isCash = pm === '현금'
+                    return (
+                      <button
+                        key={pm}
+                        type="button"
+                        onClick={() => setPayMethod(isActive ? '' : pm)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700,
+                          cursor: 'pointer', transition: 'all 0.12s',
+                          background: isActive ? (isCash ? '#ecfdf5' : '#eef0fe') : '#f3f4f6',
+                          border: `1.5px solid ${isActive ? (isCash ? '#6ee7b7' : '#c7c3fa') : '#e5e7eb'}`,
+                          color: isActive ? (isCash ? '#047857' : '#4f46e5') : '#6b7280',
+                        }}
+                      >
+                        {isCash ? <Banknote size={13} /> : <CreditCard size={13} />}
+                        {pm}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               {/* 카테고리 */}
