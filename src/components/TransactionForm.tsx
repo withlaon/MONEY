@@ -62,9 +62,8 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
 
   const cats = categories.filter(c => c.type === expType)
 
-  /* ── 제출 ── */
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  /* ── 제출 (form 대신 onClick으로만 동작 — React19 form action 우회) ── */
+  const submit = async () => {
     const raw = Number(amount.replace(/,/g, ''))
     if (!raw) { setError('금액을 입력해주세요.'); return }
     setSaving(true); setError('')
@@ -194,9 +193,9 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
           </button>
         </div>
 
-        {/* 폼 */}
-        <form
-          onSubmit={submit}
+        {/* 폼 — form 태그 제거, div 사용 (React19 form action ByteString 이슈 방지) */}
+        <div
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
           style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}
         >
 
@@ -465,7 +464,8 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
               취소
             </button>
             <button
-              type="submit"
+              type="button"
+              onClick={submit}
               disabled={saving}
               className={cn(saving && 'opacity-60')}
               style={{
@@ -479,7 +479,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
               {saving ? '저장 중...' : '저장하기'}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   )
