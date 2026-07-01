@@ -1,19 +1,55 @@
 'use server'
 
-import { createClient } from '@supabase/supabase-js'
+/* ── PostgREST 직접 호출 (Supabase 클라이언트 미사용)
+   한글 등 비ASCII 문자가 헤더에 들어가는 ByteString 오류를 근본적으로 차단 ── */
 
-/* 서버용 Supabase 클라이언트 (localStorage 접근 없음) */
-function makeClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) throw new Error('Supabase 환경변수 누락')
-  return createClient(url, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
+function base() {
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1`
+}
+
+function authHeaders() {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    'Content-Type': 'application/json',
+  }
+}
+
+/* 공통 INSERT 헬퍼 — 한글 데이터는 오직 JSON body에만 포함 */
+async function pgInsert<T>(
+  table: string,
+  select: string,
+  body: Record<string, unknown>
+): Promise<T[]> {
+  const res = await fetch(`${base()}/${table}?select=${select}`, {
+    method: 'POST',
+    headers: { ...authHeaders(), Prefer: 'return=representation' },
+    body: JSON.stringify(body),
   })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}) as Record<string, string>)
+    throw new Error(
+      (err as Record<string, string>).message ||
+      (err as Record<string, string>).hint ||
+      `HTTP ${res.status}`
+    )
+  }
+  return res.json() as Promise<T[]>
+}
+
+/* 공통 DELETE 헬퍼 */
+async function pgDelete(table: string, id: string): Promise<void> {
+  const res = await fetch(`${base()}/${table}?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders(), Prefer: 'return=minimal' },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}) as Record<string, string>)
+    throw new Error(
+      (err as Record<string, string>).message || `HTTP ${res.status}`
+    )
+  }
 }
 
 type ActionResult<T> = { data: T; error: null } | { data: null; error: string }
@@ -24,15 +60,13 @@ export async function serverAddIncomeSource(
   description: string | null
 ): Promise<ActionResult<{ id: string; name: string; description: string | null; is_active: boolean }>> {
   try {
-    const sb = makeClient()
-    const { data: rows, error } = await sb
-      .from('income_sources')
-      .insert({ name, description })
-      .select('id, name, description, is_active')
-
-    if (error) return { data: null, error: error.message }
-    if (!rows || rows.length === 0) return { data: null, error: '입금처 저장 실패' }
-    return { data: rows[0] as { id: string; name: string; description: string | null; is_active: boolean }, error: null }
+    const rows = await pgInsert<{ id: string; name: string; description: string | null; is_active: boolean }>(
+      'income_sources',
+      'id,name,description,is_active',
+      { name, description }
+    )
+    if (!rows[0]) return { data: null, error: '입금처 저장 실패' }
+    return { data: rows[0], error: null }
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : '알 수 없는 오류' }
   }
@@ -45,15 +79,13 @@ export async function serverAddExpenseCategory(
   description: string | null
 ): Promise<ActionResult<{ id: string; name: string; type: 'office' | 'personal'; description: string | null; is_active: boolean }>> {
   try {
-    const sb = makeClient()
-    const { data: rows, error } = await sb
-      .from('expense_categories')
-      .insert({ name, type, description })
-      .select('id, name, type, description, is_active')
-
-    if (error) return { data: null, error: error.message }
-    if (!rows || rows.length === 0) return { data: null, error: '카테고리 저장 실패' }
-    return { data: rows[0] as { id: string; name: string; type: 'office' | 'personal'; description: string | null; is_active: boolean }, error: null }
+    const rows = await pgInsert<{ id: string; name: string; type: 'office' | 'personal'; description: string | null; is_active: boolean }>(
+      'expense_categories',
+      'id,name,type,description,is_active',
+      { name, type, description }
+    )
+    if (!rows[0]) return { data: null, error: '카테고리 저장 실패' }
+    return { data: rows[0], error: null }
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : '알 수 없는 오류' }
   }
@@ -72,22 +104,21 @@ export async function serverAddTransaction(payload: {
   is_fixed: boolean
 }): Promise<ActionResult<Record<string, unknown>>> {
   try {
-    const sb = makeClient()
-    const { data, error } = await sb
-      .from('transactions')
-      .insert(payload)
-      .select(`
-        id, transaction_type, amount, transaction_date,
-        description, memo, expense_type, is_fixed,
-        income_source_id, expense_category_id,
-        income_sources(id, name),
-        expense_categories(id, name, type)
-      `)
-      .single()
+    const select = [
+      'id', 'transaction_type', 'amount', 'transaction_date',
+      'description', 'memo', 'expense_type', 'is_fixed',
+      'income_source_id', 'expense_category_id',
+      'income_sources(id,name)',
+      'expense_categories(id,name,type)',
+    ].join(',')
 
-    if (error) return { data: null, error: error.message }
-    if (!data) return { data: null, error: '거래 저장 실패' }
-    return { data: data as Record<string, unknown>, error: null }
+    const rows = await pgInsert<Record<string, unknown>>(
+      'transactions',
+      select,
+      payload as unknown as Record<string, unknown>
+    )
+    if (!rows[0]) return { data: null, error: '거래 저장 실패' }
+    return { data: rows[0], error: null }
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : '알 수 없는 오류' }
   }
@@ -96,9 +127,7 @@ export async function serverAddTransaction(payload: {
 /* ── 거래 삭제 ── */
 export async function serverDeleteTransaction(id: string): Promise<ActionResult<true>> {
   try {
-    const sb = makeClient()
-    const { error } = await sb.from('transactions').delete().eq('id', id)
-    if (error) return { data: null, error: error.message }
+    await pgDelete('transactions', id)
     return { data: true, error: null }
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : '알 수 없는 오류' }
