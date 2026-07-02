@@ -1,13 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { Trash2, TrendingUp, Building2, User, Lock, ChevronDown, TrendingDown, Receipt } from 'lucide-react'
+import { Trash2, Pencil, TrendingUp, Building2, User, Lock, ChevronDown, TrendingDown, Receipt } from 'lucide-react'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { Transaction } from '@/lib/supabase'
 
-interface Props { transactions: Transaction[]; onDelete: (id: string) => void }
+interface Props {
+  transactions: Transaction[]
+  onDelete: (id: string) => void
+  onEdit: (tx: Transaction) => void
+}
 
-export default function TransactionList({ transactions, onDelete }: Props) {
+export default function TransactionList({ transactions, onDelete, onEdit }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -155,19 +159,34 @@ export default function TransactionList({ transactions, onDelete }: Props) {
                                 {t.memo}
                               </p>
                             )}
+                            {t.payment_method && (
+                              <p className="text-[12px]" style={{ color: 'var(--day-text3)' }}>
+                                결제 · {t.payment_method}
+                              </p>
+                            )}
                             <p className="text-[12px]" style={{ color: 'var(--day-text3)' }}>
                               등록일 · {new Date(t.created_at).toLocaleDateString('ko-KR')}
                             </p>
                           </div>
-                          <button
-                            onClick={() => del(t.id)}
-                            disabled={deletingId === t.id}
-                            className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold flex-shrink-0', deletingId === t.id && 'opacity-50')}
-                            style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626' }}
-                          >
-                            <Trash2 size={12} />
-                            {deletingId === t.id ? '삭제 중' : '삭제'}
-                          </button>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => onEdit(t)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold"
+                              style={{ background: '#eef0fe', border: '1px solid #c7c3fa', color: '#4f46e5' }}
+                            >
+                              <Pencil size={12} />
+                              수정
+                            </button>
+                            <button
+                              onClick={() => del(t.id)}
+                              disabled={deletingId === t.id}
+                              className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold', deletingId === t.id && 'opacity-50')}
+                              style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626' }}
+                            >
+                              <Trash2 size={12} />
+                              {deletingId === t.id ? '삭제 중' : '삭제'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

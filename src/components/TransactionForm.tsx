@@ -1,17 +1,19 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { X, Plus, TrendingUp, TrendingDown, Building2, User, Lock, Zap, Check, CreditCard, Banknote } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { X, Plus, TrendingUp, TrendingDown, Building2, User, Lock, Zap, Check, CreditCard, Banknote, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Transaction } from '@/lib/supabase'
-import { useIncomeSources, useExpenseCategories } from '@/hooks/useTransactions'
+import { useIncomeSources, useExpenseCategories, useDescriptionPresets } from '@/hooks/useTransactions'
 
 const PAYMENT_METHODS = ['현금', '삼성카드', 'KB카드', '현대카드'] as const
+const INCOME_CATS = ['판매대금', '기타'] as const
 
 interface Props {
   onSubmit: (d: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>) => Promise<void>
   onClose: () => void
   defaultType?: 'income' | 'expense'
+  initialValues?: Transaction
 }
 
 const INP: React.CSSProperties = {
@@ -24,35 +26,141 @@ const Label = ({ t }: { t: string }) => (
   <p style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', marginBottom: 8, letterSpacing: '0.02em' }}>{t}</p>
 )
 
-export default function TransactionForm({ onSubmit, onClose, defaultType = 'income' }: Props) {
-  const { sources, addSource } = useIncomeSources()
+/* 내역 콤보박스 */
+function DescCombobox({
+  value, onChange, presets, onAddPreset,
+}: {
+  value: string
+  onChange: (v: string) => void
+  presets: { id: string; name: string }[]
+  onAddPreset: (name: string) => Promise<unknown>
+}) {
+  const [open, setOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = value
+    ? presets.filter(p => p.name.toLowerCase().includes(value.toLowerCase()))
+    : presets
+
+  const handleAdd = async () => {
+    if (!value.trim() || adding) return
+    setAdding(true)
+    try { await onAddPreset(value.trim()) } finally { setAdding(false) }
+    setOpen(false)
+  }
+
+  const alreadyExists = presets.some(p => p.name === value.trim())
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <input
+            type="text"
+            value={value}
+            onChange={e => { onChange(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
+            placeholder="직접 입력하거나 선택하세요"
+            style={INP}
+          />
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            style={{
+              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 2,
+            }}
+          >
+            <ChevronDown size={15} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '0.15s' }} />
+          </button>
+        </div>
+        {value.trim() && !alreadyExists && (
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={adding}
+            title="목록에 추가"
+            style={{
+              width: 42, height: 42, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#eef0fe', border: '1.5px solid #c7c3fa', color: '#4f46e5', cursor: 'pointer', flexShrink: 0,
+              opacity: adding ? 0.5 : 1,
+            }}
+          >
+            <Plus size={16} />
+          </button>
+        )}
+      </div>
+
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, marginTop: 4,
+          background: '#fff', border: '1.5px solid #e4e9f5', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.1)', maxHeight: 180, overflowY: 'auto',
+        }}>
+          {filtered.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { onChange(p.name); setOpen(false) }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px',
+                fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#111827',
+                borderBottom: '1px solid #f3f4f6',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f8faff')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function TransactionForm({ onSubmit, onClose, defaultType = 'income', initialValues }: Props) {
+  const { sources } = useIncomeSources()
   const { categories, addCategory } = useExpenseCategories()
+  const { presets, addPreset } = useDescriptionPresets()
 
-  const [type,    setType]    = useState<'income'|'expense'>(defaultType)
-  const [amount,  setAmount]  = useState('')
-  const [date,    setDate]    = useState(new Date().toISOString().split('T')[0])
-  const [desc,    setDesc]    = useState('')
-  const [memo,    setMemo]    = useState('')
-  const [srcId,   setSrcId]   = useState('')
-  const [catId,   setCatId]   = useState('')
-  const [expType, setExpType] = useState<'office'|'personal'>('office')
-  const [fixed,   setFixed]   = useState(false)
-  const [payMethod, setPayMethod] = useState<string>('')
-  const [saving,  setSaving]  = useState(false)
-  const [error,   setError]   = useState('')
+  const isEdit = !!initialValues?.id
 
-  /* 입금처 추가 */
-  const [addSrc,  setAddSrc]  = useState(false)
-  const [newSrc,  setNewSrc]  = useState('')
-  const [srcSaving, setSrcSaving] = useState(false)
-  const [srcErr,  setSrcErr]  = useState('')
+  /* 초기값 설정 */
+  const initIncomeCat = () => {
+    if (!initialValues?.income_source_id) return '판매대금'
+    const src = sources.find(s => s.id === initialValues.income_source_id)
+    if (src?.name === '기타') return '기타'
+    return '판매대금'
+  }
+
+  const [type,       setType]       = useState<'income'|'expense'>(initialValues?.transaction_type ?? defaultType)
+  const [amount,     setAmount]     = useState(initialValues ? initialValues.amount.toLocaleString('ko-KR') : '')
+  const [date,       setDate]       = useState(initialValues?.transaction_date ?? new Date().toISOString().split('T')[0])
+  const [desc,       setDesc]       = useState(initialValues?.description ?? '')
+  const [memo,       setMemo]       = useState(initialValues?.memo ?? '')
+  const [catId,      setCatId]      = useState(initialValues?.expense_category_id ?? '')
+  const [expType,    setExpType]    = useState<'office'|'personal'>(initialValues?.expense_type ?? 'office')
+  const [fixed,      setFixed]      = useState(initialValues?.is_fixed ?? false)
+  const [payMethod,  setPayMethod]  = useState(initialValues?.payment_method ?? '')
+  const [incomeCat,  setIncomeCat]  = useState<'판매대금'|'기타'>(() => initIncomeCat() as '판매대금'|'기타')
+  const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState('')
 
   /* 카테고리 추가 */
-  const [addCat,  setAddCat]  = useState(false)
-  const [newCat,  setNewCat]  = useState('')
+  const [addCat,    setAddCat]    = useState(false)
+  const [newCat,    setNewCat]    = useState('')
   const [catSaving, setCatSaving] = useState(false)
-  const [catErr,  setCatErr]  = useState('')
-
+  const [catErr,    setCatErr]    = useState('')
   const newCatRef = useRef<HTMLInputElement>(null)
 
   const fmt = (v: string) => {
@@ -62,7 +170,12 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
 
   const cats = categories.filter(c => c.type === expType)
 
-  /* ── 제출 (form 대신 onClick으로만 동작 — React19 form action 우회) ── */
+  /* 수입 카테고리 → income_source_id 변환 */
+  const resolveIncomeSrcId = () => {
+    const match = sources.find(s => s.name === incomeCat)
+    return match?.id ?? null
+  }
+
   const submit = async () => {
     const raw = Number(amount.replace(/,/g, ''))
     if (!raw) { setError('금액을 입력해주세요.'); return }
@@ -75,7 +188,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
         description: desc || null,
         memo: memo || null,
         payment_method: type === 'expense' ? (payMethod || null) : null,
-        income_source_id:    type === 'income'  ? (srcId || null) : null,
+        income_source_id:    type === 'income'  ? resolveIncomeSrcId() : null,
         expense_category_id: type === 'expense' ? (catId || null) : null,
         expense_type: type === 'expense' ? expType : null,
         is_fixed: type === 'expense' ? fixed : false,
@@ -88,32 +201,13 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
     }
   }
 
-  /* ── 입금처 추가 ── */
-  const doSrc = async () => {
-    if (!newSrc.trim() || srcSaving) return
-    setSrcSaving(true); setSrcErr('')
-    try {
-      const s = await addSource(newSrc.trim())
-      setSrcId(s.id)
-      setNewSrc('')
-      setAddSrc(false)
-    } catch (e: unknown) {
-      setSrcErr(e instanceof Error ? e.message : '입금처 추가 실패')
-    } finally {
-      setSrcSaving(false)
-    }
-  }
-
-  /* ── 카테고리 추가 ── */
-  const doCat = async (e?: React.FormEvent) => {
-    e?.preventDefault()
+  const doCat = async () => {
     if (!newCat.trim() || catSaving) return
     setCatSaving(true); setCatErr('')
     try {
       const c = await addCategory(newCat.trim(), expType)
       setCatId(c?.id ?? '')
-      setNewCat('')
-      setAddCat(false)
+      setNewCat(''); setAddCat(false)
     } catch (e: unknown) {
       setCatErr(e instanceof Error ? e.message : '카테고리 추가 실패')
     } finally {
@@ -152,7 +246,6 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
   )
 
   return (
-    /* ── 오버레이: 완전 불투명 어두운 배경 ── */
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-8"
       onClick={onClose}
@@ -180,7 +273,9 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '12px 20px 14px', borderBottom: '1px solid #f0f3fb',
         }}>
-          <p style={{ fontSize: 17, fontWeight: 800, color: '#111827' }}>거래 추가</p>
+          <p style={{ fontSize: 17, fontWeight: 800, color: '#111827' }}>
+            {isEdit ? '거래 수정' : '거래 추가'}
+          </p>
           <button
             type="button"
             onClick={onClose}
@@ -193,7 +288,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
           </button>
         </div>
 
-        {/* 폼 — form 태그 제거, div 사용 (React19 form action ByteString 이슈 방지) */}
+        {/* 폼 */}
         <div
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
           style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}
@@ -220,7 +315,6 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                 type="text" value={amount}
                 onChange={e => setAmount(fmt(e.target.value))}
                 placeholder="0"
-                required
                 style={{ ...INP, paddingLeft: 34 }}
               />
             </div>
@@ -229,79 +323,62 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
           {/* 날짜 */}
           <div>
             <Label t="날짜 *" />
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} required style={INP} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={INP} />
           </div>
 
-          {/* 내역 */}
-          <div>
-            <Label t="내역 (선택)" />
-            <input
-              type="text" value={desc}
-              onChange={e => setDesc(e.target.value)}
-              placeholder={type === 'income' ? '예: 스마트스토어 6월 정산' : '예: 창고 임대료'}
-              style={INP}
-            />
-          </div>
-
-          {/* 수입: 입금처 */}
+          {/* ── 수입 전용 ── */}
           {type === 'income' && (
-            <div>
-              <Label t="입금처" />
-              {!addSrc ? (
-                <div style={{ display:'flex', gap:8 }}>
-                  <select
-                    value={srcId}
-                    onChange={e => setSrcId(e.target.value)}
-                    style={{ ...INP, flex:1 }}
-                  >
-                    <option value="">선택하세요</option>
-                    {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setAddSrc(true)}
-                    style={{
-                      width:42, height:42, borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center',
-                      background: '#eef0fe', border: '1.5px solid #c7c3fa', color:'#4f46e5', cursor:'pointer', flexShrink:0,
-                    }}
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              ) : (
-                <div style={{ background:'#f8faff', border:'1.5px solid #c7c3fa', borderRadius:12, padding:14, display:'flex', flexDirection:'column', gap:10 }}>
-                  <p style={{ fontSize:12, fontWeight:800, color:'#4f46e5' }}>새 입금처 추가</p>
-                  <input
-                    autoFocus
-                    value={newSrc}
-                    onChange={e => setNewSrc(e.target.value)}
-                    placeholder="입금처 이름 (예: 스마트스토어)"
-                    style={INP}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); doSrc() } }}
-                  />
-                  {srcErr && <p style={{ fontSize:12, color:'#dc2626' }}>{srcErr}</p>}
-                  <div style={{ display:'flex', gap:8 }}>
-                    <button type="button" onClick={doSrc} disabled={!newSrc.trim() || srcSaving}
+            <>
+              {/* 수입 카테고리 */}
+              <div>
+                <Label t="카테고리" />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {INCOME_CATS.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setIncomeCat(cat)}
                       style={{
-                        flex:1, padding:'9px', borderRadius:9, fontSize:13, fontWeight:800, cursor:'pointer',
-                        background:'#4f46e5', color:'#fff', border:'none', opacity: (!newSrc.trim()||srcSaving)?0.5:1,
-                      }}>
-                      <Check size={13} style={{ display:'inline', marginRight:5 }} />
-                      {srcSaving ? '추가 중...' : '추가'}
+                        padding: '10px 8px', borderRadius: 10, fontSize: 13, fontWeight: 800,
+                        cursor: 'pointer', transition: 'all 0.12s',
+                        background: incomeCat === cat ? '#ecfdf5' : '#f8faff',
+                        border: `1.5px solid ${incomeCat === cat ? '#a7f3d0' : '#e4e9f5'}`,
+                        color: incomeCat === cat ? '#059669' : '#9ca3af',
+                      }}
+                    >
+                      {cat}
                     </button>
-                    <button type="button" onClick={() => { setAddSrc(false); setNewSrc(''); setSrcErr('') }}
-                      style={{ padding:'9px 16px', borderRadius:9, fontSize:13, cursor:'pointer', background:'#f3f4f6', border:'none', color:'#6b7280' }}>
-                      취소
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              )}
-            </div>
+              </div>
+
+              {/* 내역 콤보박스 */}
+              <div>
+                <Label t="내역 (선택·입력·추가 가능)" />
+                <DescCombobox
+                  value={desc}
+                  onChange={setDesc}
+                  presets={presets}
+                  onAddPreset={addPreset}
+                />
+              </div>
+            </>
           )}
 
-          {/* 지출 섹션 */}
+          {/* ── 지출 전용 ── */}
           {type === 'expense' && (
             <>
+              {/* 내역 */}
+              <div>
+                <Label t="내역 (선택)" />
+                <input
+                  type="text" value={desc}
+                  onChange={e => setDesc(e.target.value)}
+                  placeholder="예: 창고 임대료"
+                  style={INP}
+                />
+              </div>
+
               {/* 지출 구분 */}
               <div>
                 <Label t="지출 구분" />
@@ -317,7 +394,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                 />
               </div>
 
-              {/* 고정비 / 변동비 */}
+              {/* 비용 유형 */}
               <div>
                 <Label t="비용 유형" />
                 <Toggle2
@@ -403,23 +480,16 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                     />
                     {catErr && <p style={{ fontSize:12, color:'#dc2626' }}>{catErr}</p>}
                     <div style={{ display:'flex', gap:8 }}>
-                      <button
-                        type="button"
-                        onClick={() => doCat()}
-                        disabled={!newCat.trim() || catSaving}
+                      <button type="button" onClick={doCat} disabled={!newCat.trim() || catSaving}
                         style={{
                           flex:1, padding:'9px', borderRadius:9, fontSize:13, fontWeight:800, cursor:'pointer',
                           background:'#4f46e5', color:'#fff', border:'none', opacity:(!newCat.trim()||catSaving)?0.5:1,
-                        }}
-                      >
+                        }}>
                         <Check size={13} style={{ display:'inline', marginRight:5 }} />
                         {catSaving ? '추가 중...' : '추가'}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => { setAddCat(false); setNewCat(''); setCatErr('') }}
-                        style={{ padding:'9px 16px', borderRadius:9, fontSize:13, cursor:'pointer', background:'#f3f4f6', border:'none', color:'#6b7280' }}
-                      >
+                      <button type="button" onClick={() => { setAddCat(false); setNewCat(''); setCatErr('') }}
+                        style={{ padding:'9px 16px', borderRadius:9, fontSize:13, cursor:'pointer', background:'#f3f4f6', border:'none', color:'#6b7280' }}>
                         취소
                       </button>
                     </div>
@@ -450,20 +520,14 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
 
           {/* 저장 버튼 */}
           <div style={{ display:'flex', gap:10, paddingTop:4 }}>
-            <button
-              type="button"
-              onClick={onClose}
+            <button type="button" onClick={onClose}
               style={{
                 flex:1, padding:'13px', borderRadius:12, fontSize:14, fontWeight:800, cursor:'pointer',
                 background:'#f3f4f6', border:'none', color:'#6b7280',
-              }}
-            >
+              }}>
               취소
             </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={saving}
+            <button type="button" onClick={submit} disabled={saving}
               className={cn(saving && 'opacity-60')}
               style={{
                 flex:2, padding:'13px', borderRadius:12, fontSize:14, fontWeight:800, cursor:'pointer',
@@ -471,9 +535,8 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                 background: type === 'income'
                   ? 'linear-gradient(135deg,#047857,#10b981)'
                   : 'linear-gradient(135deg,#4f46e5,#7c72f0)',
-              }}
-            >
-              {saving ? '저장 중...' : '저장하기'}
+              }}>
+              {saving ? '저장 중...' : isEdit ? '수정하기' : '저장하기'}
             </button>
           </div>
         </div>

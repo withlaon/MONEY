@@ -50,6 +50,23 @@ export async function pgInsert<T>(
   return json as T[]
 }
 
+/* PATCH */
+export async function pgPatch<T>(
+  table: string,
+  id: string,
+  select: string,
+  body: Record<string, unknown>
+): Promise<T[]> {
+  const res = await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}&select=${select}`, {
+    method: 'PATCH',
+    headers: authHeaders({ Prefer: 'return=representation' }),
+    body: JSON.stringify(body),
+  })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json?.message ?? json?.hint ?? `HTTP ${res.status}`)
+  return json as T[]
+}
+
 /* DELETE */
 export async function pgDelete(table: string, id: string): Promise<void> {
   const res = await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, {

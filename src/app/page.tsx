@@ -144,7 +144,7 @@ export default function DashboardPage() {
               {Array.from({length:5}).map((_,i) => <SkeletonRow key={i} />)}
             </div>
           ) : (
-            <TransactionList transactions={transactions} onDelete={deleteTransaction} />
+            <TransactionList transactions={transactions} onDelete={deleteTransaction} onEdit={() => {}} />
           )}
         </div>
       </div>

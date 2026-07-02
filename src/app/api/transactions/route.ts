@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { pgGet, pgInsert, pgDelete } from '../_supabase'
+import { pgGet, pgInsert, pgDelete, pgPatch } from '../_supabase'
 
 const TX_SELECT = [
   'id', 'transaction_type', 'amount', 'transaction_date',
@@ -49,6 +49,20 @@ export async function POST(req: NextRequest) {
       'transactions', TX_SELECT, payload
     )
     if (!rows[0]) return NextResponse.json({ error: '거래 저장 실패' }, { status: 400 })
+    return NextResponse.json({ data: rows[0] })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : '알 수 없는 오류' }, { status: 500 })
+  }
+}
+
+/* 거래 수정 */
+export async function PATCH(req: NextRequest) {
+  try {
+    const payload = await req.json() as { id: string } & Record<string, unknown>
+    const { id, ...rest } = payload
+    if (!id) return NextResponse.json({ error: 'id 필요' }, { status: 400 })
+    const rows = await pgPatch<Record<string, unknown>>('transactions', id, TX_SELECT, rest)
+    if (!rows[0]) return NextResponse.json({ error: '거래 수정 실패' }, { status: 400 })
     return NextResponse.json({ data: rows[0] })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : '알 수 없는 오류' }, { status: 500 })

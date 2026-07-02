@@ -7,6 +7,7 @@ import { getCurrentYearMonth } from '@/lib/utils'
 import MonthSelector from '@/components/MonthSelector'
 import TransactionList from '@/components/TransactionList'
 import TransactionForm from '@/components/TransactionForm'
+import { Transaction } from '@/lib/supabase'
 
 function SkeletonRow() {
   return (
@@ -27,12 +28,14 @@ export default function TransactionsPage() {
   const { year: iy, month: im } = getCurrentYearMonth()
   const [year, setYear]   = useState(iy)
   const [month, setMonth] = useState(im)
-  const [showForm, setShowForm] = useState(false)
-  const [formType, setFormType] = useState<'income'|'expense'>('income')
-  const [filter, setFilter]     = useState<Filter>('all')
+  const [showForm, setShowForm]   = useState(false)
+  const [formType, setFormType]   = useState<'income'|'expense'>('income')
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  const [filter, setFilter]       = useState<Filter>('all')
 
-  const { transactions, loading, addTransaction, deleteTransaction } = useTransactions(year, month)
+  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction } = useTransactions(year, month)
   const openForm = (t: 'income'|'expense') => { setFormType(t); setShowForm(true) }
+  const openEdit = (tx: Transaction) => { setEditingTx(tx) }
 
   const filtered = filter === 'all' ? transactions : transactions.filter(t => t.transaction_type === filter)
 
@@ -125,7 +128,7 @@ export default function TransactionsPage() {
               <p style={{ fontSize: 13, marginTop: 4, color: 'var(--day-text3)' }}>위 버튼으로 추가하세요</p>
             </div>
           ) : (
-            <TransactionList transactions={filtered} onDelete={deleteTransaction} />
+            <TransactionList transactions={filtered} onDelete={deleteTransaction} onEdit={openEdit} />
           )}
         </div>
       </div>
@@ -144,6 +147,15 @@ export default function TransactionsPage() {
           defaultType={formType}
           onSubmit={async (d) => { await addTransaction(d) }}
           onClose={() => setShowForm(false)}
+        />
+      )}
+
+      {editingTx && (
+        <TransactionForm
+          initialValues={editingTx}
+          defaultType={editingTx.transaction_type}
+          onSubmit={async (d) => { await updateTransaction(editingTx.id, d) }}
+          onClose={() => setEditingTx(null)}
         />
       )}
     </div>

@@ -67,6 +67,26 @@ export function useTransactions(year: number, month: number) {
     return result.data
   }
 
+  /* 거래 수정 */
+  const updateTransaction = async (
+    id: string,
+    t: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>
+  ) => {
+    const res = await fetch('/api/transactions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...t }),
+    })
+    const result = await res.json() as { data?: Record<string, unknown>; error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '거래 수정 실패')
+    const updated = transactions.map(tx =>
+      tx.id === id ? (result.data as unknown as Transaction) : tx
+    )
+    cache.set(key, updated)
+    setTransactions(updated)
+    return result.data
+  }
+
   /* 거래 삭제 */
   const deleteTransaction = async (id: string) => {
     const res = await fetch(`/api/transactions?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
@@ -90,7 +110,7 @@ export function useTransactions(year: number, month: number) {
     variableExpense: transactions.filter(t => t.transaction_type === 'expense' && !t.is_fixed).reduce((s, t) => s + t.amount, 0),
   }
 
-  return { transactions, loading, error, stats, refetch: fetchTransactions, addTransaction, deleteTransaction }
+  return { transactions, loading, error, stats, refetch: fetchTransactions, addTransaction, updateTransaction, deleteTransaction }
 }
 
 /* ══════════════════════════════
@@ -175,6 +195,62 @@ export function useExpenseCategories() {
   }
 
   return { categories, loading, addCategory }
+}
+
+/* ══════════════════════════════
+   내역 프리셋 훅
+══════════════════════════════ */
+const DEFAULT_PRESETS = ['스마트스토어', '토스쇼핑', '지마켓', '옥션', '쿠팡', '11번가']
+let presetCache: { id: string; name: string }[] | null = null
+
+export function useDescriptionPresets() {
+  const [presets, setPresets] = useState<{ id: string; name: string }[]>(presetCache || [])
+
+  useEffect(() => {
+    if (presetCache) { setPresets(presetCache); return }
+    fetch('/api/description-presets')
+      .then(r => r.json() as Promise<{ data?: { id: string; name: string }[] }>)
+      .then(result => {
+        const fetched = result.data || []
+        /* DB에 없으면 기본값 사용 */
+        const list = fetched.length > 0 ? fetched : DEFAULT_PRESETS.map((n, i) => ({ id: String(i), name: n }))
+        presetCache = list
+        setPresets([...list])
+      })
+      .catch(() => {
+        const fallback = DEFAULT_PRESETS.map((n, i) => ({ id: String(i), name: n }))
+        presetCache = fallback
+        setPresets(fallback)
+      })
+  }, [])
+
+  const addPreset = async (name: string) => {
+    try {
+      const res = await fetch('/api/description-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      const result = await res.json() as { data?: { id: string; name: string } }
+      const item = result.data || { id: Date.now().toString(), name }
+      setPresets(prev => {
+        const next = [...prev, item]
+        presetCache = next
+        return next
+      })
+      return item
+    } catch {
+      const item = { id: Date.now().toString(), name }
+      setPresets(prev => {
+        const next = [...prev, item]
+        presetCache = next
+        return next
+      })
+      return item
+    }
+  }
+
+  return { presets, addPreset }
 }
 
 /* ══════════════════════════════

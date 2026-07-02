@@ -55,14 +55,9 @@ CREATE TABLE IF NOT EXISTS monthly_budgets (
   UNIQUE(year, month)
 );
 
--- 기본 입금처
+-- 수입 카테고리 (판매대금 / 기타)
 INSERT INTO income_sources (name, description) VALUES
-  ('스마트스토어', '네이버 스마트스토어 판매대금'),
-  ('쿠팡', '쿠팡 판매대금'),
-  ('11번가', '11번가 판매대금'),
-  ('G마켓', 'G마켓 판매대금'),
-  ('옥션', '옥션 판매대금'),
-  ('직접판매', '직거래 판매'),
+  ('판매대금', '쇼핑몰 판매 수입'),
   ('기타', '기타 수입')
 ON CONFLICT DO NOTHING;
 
@@ -94,6 +89,19 @@ INSERT INTO expense_categories (name, type, description) VALUES
   ('경조사비', 'personal', '결혼, 장례 등'),
   ('주거비', 'personal', '월세, 관리비 등'),
   ('기타개인비', 'personal', '기타 개인 지출')
+ON CONFLICT DO NOTHING;
+
+-- 내역 프리셋 테이블 (수입 내역 빠른 선택)
+CREATE TABLE IF NOT EXISTS description_presets (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE description_presets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all on description_presets" ON description_presets FOR ALL USING (true) WITH CHECK (true);
+
+INSERT INTO description_presets (name) VALUES
+  ('스마트스토어'), ('토스쇼핑'), ('지마켓'), ('옥션'), ('쿠팡'), ('11번가')
 ON CONFLICT DO NOTHING;
 
 -- 인덱스
