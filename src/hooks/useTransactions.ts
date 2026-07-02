@@ -144,15 +144,33 @@ export function useIncomeSources() {
     const result = await res.json() as { data?: IncomeSource; error?: string }
     if (!res.ok || result.error) throw new Error(result.error || '입금처 저장 실패')
     const newItem = result.data as IncomeSource
-    setSources(prev => {
-      const next = [...prev, newItem]
-      srcCache = next
-      return next
-    })
+    setSources(prev => { const next = [...prev, newItem]; srcCache = next; return next })
     return newItem
   }
 
-  return { sources, loading, addSource }
+  /* 입금처 수정 */
+  const updateSource = async (id: string, name: string, description?: string) => {
+    const res = await fetch('/api/income-sources', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, description: description ?? null }),
+    })
+    const result = await res.json() as { data?: IncomeSource; error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '입금처 수정 실패')
+    const updated = result.data as IncomeSource
+    setSources(prev => { const next = prev.map(s => s.id === id ? updated : s); srcCache = next; return next })
+    return updated
+  }
+
+  /* 입금처 삭제 */
+  const deleteSource = async (id: string) => {
+    const res = await fetch(`/api/income-sources?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const result = await res.json() as { error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '입금처 삭제 실패')
+    setSources(prev => { const next = prev.filter(s => s.id !== id); srcCache = next; return next })
+  }
+
+  return { sources, loading, addSource, updateSource, deleteSource }
 }
 
 /* ══════════════════════════════
@@ -186,15 +204,33 @@ export function useExpenseCategories() {
     const result = await res.json() as { data?: ExpenseCategory; error?: string }
     if (!res.ok || result.error) throw new Error(result.error || '카테고리 저장 실패')
     const newItem = result.data as ExpenseCategory
-    setCategories(prev => {
-      const next = [...prev, newItem]
-      catCache = next
-      return next
-    })
+    setCategories(prev => { const next = [...prev, newItem]; catCache = next; return next })
     return newItem
   }
 
-  return { categories, loading, addCategory }
+  /* 카테고리 수정 */
+  const updateCategory = async (id: string, name: string, type: 'office'|'personal', description?: string) => {
+    const res = await fetch('/api/expense-categories', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, type, description: description ?? null }),
+    })
+    const result = await res.json() as { data?: ExpenseCategory; error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '카테고리 수정 실패')
+    const updated = result.data as ExpenseCategory
+    setCategories(prev => { const next = prev.map(c => c.id === id ? updated : c); catCache = next; return next })
+    return updated
+  }
+
+  /* 카테고리 삭제 */
+  const deleteCategory = async (id: string) => {
+    const res = await fetch(`/api/expense-categories?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const result = await res.json() as { error?: string }
+    if (!res.ok || result.error) throw new Error(result.error || '카테고리 삭제 실패')
+    setCategories(prev => { const next = prev.filter(c => c.id !== id); catCache = next; return next })
+  }
+
+  return { categories, loading, addCategory, updateCategory, deleteCategory }
 }
 
 /* ══════════════════════════════

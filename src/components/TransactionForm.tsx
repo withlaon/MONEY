@@ -133,6 +133,9 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
   const { categories, addCategory } = useExpenseCategories()
   const { presets, addPreset } = useDescriptionPresets()
 
+  /* 드래그로 창이 닫히는 버그 방지: mousedown이 오버레이에서 시작된 경우만 닫기 */
+  const overlayMouseDownRef = useRef(false)
+
   const isEdit = !!initialValues?.id
 
   /* 초기값 설정 */
@@ -248,7 +251,8 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-8"
-      onClick={onClose}
+      onMouseDown={e => { overlayMouseDownRef.current = e.target === e.currentTarget }}
+      onMouseUp={() => { if (overlayMouseDownRef.current) onClose() }}
       style={{ background: 'rgba(0,0,0,0.82)' }}
     >
       <div
@@ -261,7 +265,7 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
           display: 'flex',
           flexDirection: 'column',
         }}
-        onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
       >
         {/* 핸들 */}
         <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
