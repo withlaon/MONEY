@@ -56,7 +56,7 @@ export default function StatsCards({ stats }: Props) {
             style={{
               background: 'var(--day-card)',
               border: '1px solid var(--day-border)',
-              borderRadius: 16,
+              borderRadius: 0,
               boxShadow: 'var(--day-shadow)',
               animationDelay: `${i * 40}ms`,
             }}
