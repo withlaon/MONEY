@@ -65,12 +65,24 @@ type CardRow = {
   installment_months?: number | null
 }
 
-/* 달 차이 (양수 = txDate가 billingEnd보다 이전) */
-const monthsBefore = (txDate: Date, billingEnd: Date) =>
-  (billingEnd.getFullYear() - txDate.getFullYear()) * 12 +
-  (billingEnd.getMonth() - txDate.getMonth())
-
 const LOOKBACK = 36 // 최대 할부 개월 수
+
+/**
+ * 이 결제기간([start, end]) 기준으로 해당 거래가 몇 번째 회차인지 반환
+ * 0  = 이번 결제기간 안에 있음 (1회차)
+ * 1  = 1개월 전 기간 (2회차)
+ * -1 = 결제기간 이후 (미래) → 제외
+ */
+function billingOffset(txDate: Date, cardStart: Date, cardEnd: Date): number {
+  const tx = txDate.getTime()
+  if (tx >= cardStart.getTime() && tx <= cardEnd.getTime()) return 0 // 이번 기간 내
+  if (tx > cardEnd.getTime()) return -1 // 미래
+  // tx < cardStart: 몇 개월 이전인지 (카드 시작월 기준 month diff)
+  const diff =
+    (cardStart.getFullYear() - txDate.getFullYear()) * 12 +
+    (cardStart.getMonth() - txDate.getMonth())
+  return diff > 0 ? diff : 1
+}
 
 function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
   const today = new Date()
@@ -79,12 +91,12 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const allEnds = cards.map(c => c.end)
+    const allEnds   = cards.map(c => c.end)
+    const allStarts = cards.map(c => c.start)
     const maxDate = allEnds.reduce((a, b) => a > b ? a : b)
-
-    // 할부 조회를 위해 최대 할부 개월수만큼 과거로 확장
-    const minDate = new Date(maxDate)
-    minDate.setMonth(minDate.getMonth() - LOOKBACK + 1)
+    // 할부 조회를 위해 최대 할부 개월수만큼 과거로 확장 (시작일 기준)
+    const minDate = allStarts.reduce((a, b) => a < b ? a : b)
+    minDate.setMonth(minDate.getMonth() - LOOKBACK)
 
     fetch(`/api/transactions?start=${fmtDate(minDate)}&end=${fmtDate(maxDate)}&detail=1`)
       .then(r => r.json())
@@ -97,9 +109,10 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
             .reduce((sum, t) => {
               const months = t.installment_months && t.installment_months > 1 ? t.installment_months : 1
               const txDate = new Date(t.transaction_date)
-              const mAgo   = monthsBefore(txDate, card.end) // 0 = 이번 결제, 1 = 지난 결제, ...
-              if (mAgo >= 0 && mAgo < months) {
-                return sum + (months === 1 ? t.amount : Math.round(t.amount / months))
+              const offset = billingOffset(txDate, card.start, card.end)
+              // offset=0 → 1회차, offset=1 → 2회차, ..., offset=months-1 → 마지막 회차
+              if (offset >= 0 && offset < months) {
+                return sum + Math.round(t.amount / months)
               }
               return sum
             }, 0)
