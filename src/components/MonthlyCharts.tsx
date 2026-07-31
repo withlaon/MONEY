@@ -246,18 +246,15 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
                 const isOpen = expandedCat === item.name
                 const isMerged = item.name === MERGED_LABEL
 
-                /* 세부 내역: 날짜+내역별 집계 */
+                /* 세부 내역: 내용(desc)+원본카테고리별 합계 */
                 const details = item.items
-                  .reduce((acc: { date: string; desc: string; origCat: string; amount: number }[], t) => {
-                    const key = `${t.transaction_date}__${t.description || '—'}__${t.expense_categories?.name || ''}`
-                    const ex = acc.find(a => `${a.date}__${a.desc}__${a.origCat}` === key)
-                    if (ex) ex.amount += t.amount
-                    else acc.push({
-                      date: t.transaction_date,
-                      desc: t.description || '—',
-                      origCat: t.expense_categories?.name || '',
-                      amount: t.amount,
-                    })
+                  .reduce((acc: { desc: string; origCat: string; amount: number; count: number }[], t) => {
+                    const desc = t.description || '—'
+                    const origCat = t.expense_categories?.name || ''
+                    const key = `${desc}__${origCat}`
+                    const ex = acc.find(a => `${a.desc}__${a.origCat}` === key)
+                    if (ex) { ex.amount += t.amount; ex.count++ }
+                    else acc.push({ desc, origCat, amount: t.amount, count: 1 })
                     return acc
                   }, [])
                   .sort((a, b) => b.amount - a.amount)
@@ -327,15 +324,17 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
                           <p style={{ fontSize:11, color:'#9ca3af' }}>세부 내역 없음</p>
                         ) : (
                           details.map((d, di) => (
-                            <div key={di} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-                              <div style={{ minWidth:0 }}>
-                                <span style={{ fontSize:11, color:'#374151', fontWeight:600 }}>
+                            <div key={di} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:4, minWidth:0, overflow:'hidden' }}>
+                                <span style={{ fontSize:11, color:'#374151', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                                   {d.desc}
                                 </span>
                                 {isMerged && d.origCat && (
-                                  <span style={{ fontSize:10, color:'#9ca3af', marginLeft:4 }}>({d.origCat})</span>
+                                  <span style={{ fontSize:10, color:'#9ca3af', flexShrink:0 }}>({d.origCat})</span>
                                 )}
-                                <span style={{ fontSize:10, color:'#d1d5db', marginLeft:4 }}>{d.date.slice(5)}</span>
+                                {d.count > 1 && (
+                                  <span style={{ fontSize:10, color:'#9ca3af', background:'#f3f4f6', padding:'1px 4px', flexShrink:0 }}>{d.count}건</span>
+                                )}
                               </div>
                               <span style={{ fontSize:11, fontWeight:700, color, flexShrink:0 }}>
                                 {formatCurrency(d.amount)}
