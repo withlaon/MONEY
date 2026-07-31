@@ -1,0 +1,512 @@
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
+import {
+  TrendingUp, TrendingDown, Building2, User, Lock, Zap,
+  CreditCard, Banknote, Plus, Check, ChevronDown,
+} from 'lucide-react'
+import { useIncomeSources, useExpenseCategories, useDescriptionPresets, clearTransactionCache } from '@/hooks/useTransactions'
+import { formatCurrency } from '@/lib/utils'
+
+const PAYMENT_METHODS = ['현금', '삼성카드', 'KB카드', '현대카드'] as const
+const INCOME_CATS = ['판매대금', '기타'] as const
+
+const today = () => new Date().toISOString().split('T')[0]
+
+/* ── 공통 스타일 ── */
+const INP: React.CSSProperties = {
+  width: '100%', background: '#f8faff', border: '1.5px solid #e4e9f5',
+  padding: '10px 14px', fontSize: 14, color: '#111827',
+}
+const LABEL: React.CSSProperties = {
+  fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 6, display: 'block',
+}
+const CARD: React.CSSProperties = {
+  background: '#fff', border: '1px solid var(--day-border)',
+  boxShadow: 'var(--day-shadow)',
+}
+const BTN_PILL = (active: boolean, activeStyle: { bg: string; border: string; color: string }) => ({
+  padding: '9px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+  background: active ? activeStyle.bg : '#f8faff',
+  border: `1.5px solid ${active ? activeStyle.border : '#e4e9f5'}`,
+  color: active ? activeStyle.color : '#9ca3af',
+  transition: 'all 0.12s',
+} as React.CSSProperties)
+
+/* ── 내역 콤보박스 ── */
+function DescCombobox({ value, onChange, presets, onAddPreset }: {
+  value: string; onChange: (v: string) => void
+  presets: { id: string; name: string }[]
+  onAddPreset: (name: string) => Promise<unknown>
+}) {
+  const [open, setOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const filtered = value ? presets.filter(p => p.name.toLowerCase().includes(value.toLowerCase())) : presets
+  const alreadyExists = presets.some(p => p.name === value.trim())
+
+  const handleAdd = async () => {
+    if (!value.trim() || adding) return
+    setAdding(true)
+    try { await onAddPreset(value.trim()) } finally { setAdding(false); setOpen(false) }
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <input type="text" value={value}
+            onChange={e => { onChange(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
+            placeholder="직접 입력하거나 선택하세요"
+            style={INP}
+          />
+          <button type="button" onClick={() => setOpen(o => !o)} style={{
+            position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af',
+          }}>
+            <ChevronDown size={15} />
+          </button>
+        </div>
+        {value.trim() && !alreadyExists && (
+          <button type="button" onClick={handleAdd} disabled={adding} style={{
+            width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#eef0fe', border: '1.5px solid #c7c3fa', color: '#4f46e5', cursor: 'pointer',
+          }}>
+            <Plus size={16} />
+          </button>
+        )}
+      </div>
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, marginTop: 4,
+          background: '#fff', border: '1.5px solid #e4e9f5',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.1)', maxHeight: 180, overflowY: 'auto',
+        }}>
+          {filtered.map(p => (
+            <button key={p.id} type="button" onClick={() => { onChange(p.name); setOpen(false) }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#111827', borderBottom: '1px solid #f3f4f6' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f8faff')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >{p.name}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── 성공 토스트 ── */
+function Toast({ msg }: { msg: string }) {
+  return (
+    <div style={{
+      position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)',
+      background: '#111827', color: '#fff', padding: '12px 24px',
+      fontWeight: 700, fontSize: 14, zIndex: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+      animation: 'fadeUp 0.25s ease',
+    }}>
+      {msg}
+    </div>
+  )
+}
+
+/* ── 수입 등록 폼 ── */
+function IncomeForm() {
+  const { sources } = useIncomeSources()
+  const { presets, addPreset } = useDescriptionPresets()
+
+  const [date, setDate] = useState(today())
+  const [incomeCat, setIncomeCat] = useState<'판매대금' | '기타'>('판매대금')
+  const [desc, setDesc] = useState('')
+  const [amount, setAmount] = useState('')
+  const [memo, setMemo] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState(false)
+
+  const fmt = (v: string) => { const n = v.replace(/\D/g, ''); return n ? Number(n).toLocaleString('ko-KR') : '' }
+
+  const resolveSourceId = () => {
+    const match = sources.find(s => s.name === incomeCat)
+    return match?.id ?? null
+  }
+
+  const save = async () => {
+    const raw = Number(amount.replace(/,/g, ''))
+    if (!raw) { setError('금액을 입력해주세요.'); return }
+    setSaving(true); setError('')
+    try {
+      const d = new Date(date)
+      const res = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_type: 'income',
+          amount: raw,
+          transaction_date: date,
+          description: desc || null,
+          memo: memo || null,
+          payment_method: null,
+          income_source_id: resolveSourceId(),
+          expense_category_id: null,
+          expense_type: null,
+          is_fixed: false,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok || result.error) throw new Error(result.error || '저장 실패')
+      clearTransactionCache(d.getFullYear(), d.getMonth() + 1)
+      setAmount(''); setDesc(''); setMemo('')
+      setToast(true)
+      setTimeout(() => setToast(false), 2000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '저장 실패')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={CARD}>
+      {/* 헤더 */}
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f3fb', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 36, height: 36, background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
+          <TrendingUp size={18} />
+        </div>
+        <div>
+          <p style={{ fontSize: 16, fontWeight: 800, color: '#059669' }}>수입 등록</p>
+          <p style={{ fontSize: 11, color: '#9ca3af' }}>판매대금 및 기타 수입</p>
+        </div>
+      </div>
+
+      {/* 폼 */}
+      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* 날짜 */}
+        <div>
+          <span style={LABEL}>날짜</span>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={INP} />
+        </div>
+
+        {/* 카테고리 */}
+        <div>
+          <span style={LABEL}>카테고리</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {INCOME_CATS.map(cat => (
+              <button key={cat} type="button" onClick={() => setIncomeCat(cat)}
+                style={BTN_PILL(incomeCat === cat, { bg: '#ecfdf5', border: '#a7f3d0', color: '#059669' })}>
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 내역 */}
+        <div>
+          <span style={LABEL}>내역</span>
+          <DescCombobox value={desc} onChange={setDesc} presets={presets} onAddPreset={addPreset} />
+        </div>
+
+        {/* 금액 */}
+        <div>
+          <span style={LABEL}>금액 *</span>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 15, fontWeight: 800, color: '#9ca3af' }}>₩</span>
+            <input type="text" value={amount}
+              onChange={e => setAmount(fmt(e.target.value))}
+              placeholder="0"
+              style={{ ...INP, paddingLeft: 34, fontSize: 18, fontWeight: 800, color: '#059669' }}
+            />
+          </div>
+          {amount && (
+            <p style={{ fontSize: 12, color: '#059669', marginTop: 4, fontWeight: 700 }}>
+              {formatCurrency(Number(amount.replace(/,/g, '')))}원
+            </p>
+          )}
+        </div>
+
+        {/* 메모 */}
+        <div>
+          <span style={LABEL}>메모 (선택)</span>
+          <textarea value={memo} onChange={e => setMemo(e.target.value)}
+            placeholder="추가 메모" rows={2}
+            style={{ ...INP, resize: 'none' }} />
+        </div>
+
+        {error && (
+          <p style={{ fontSize: 13, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626' }}>
+            {error}
+          </p>
+        )}
+
+        <button type="button" onClick={save} disabled={saving}
+          style={{
+            padding: '13px', fontSize: 15, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer',
+            background: saving ? '#d1fae5' : 'linear-gradient(135deg,#047857,#10b981)',
+            color: '#fff', border: 'none', opacity: saving ? 0.7 : 1,
+          }}>
+          {saving ? '저장 중...' : '수입 저장하기'}
+        </button>
+      </div>
+      {toast && <Toast msg="✓ 수입이 등록되었습니다" />}
+    </div>
+  )
+}
+
+/* ── 지출 등록 폼 ── */
+function ExpenseForm() {
+  const { categories, addCategory } = useExpenseCategories()
+
+  const [date, setDate] = useState(today())
+  const [amount, setAmount] = useState('')
+  const [desc, setDesc] = useState('')
+  const [expType, setExpType] = useState<'office' | 'personal'>('office')
+  const [fixed, setFixed] = useState(false)
+  const [payMethod, setPayMethod] = useState('')
+  const [catId, setCatId] = useState('')
+  const [memo, setMemo] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState(false)
+
+  const [addCat, setAddCat] = useState(false)
+  const [newCat, setNewCat] = useState('')
+  const [catSaving, setCatSaving] = useState(false)
+  const [catErr, setCatErr] = useState('')
+  const newCatRef = useRef<HTMLInputElement>(null)
+
+  const fmt = (v: string) => { const n = v.replace(/\D/g, ''); return n ? Number(n).toLocaleString('ko-KR') : '' }
+  const cats = categories.filter(c => c.type === expType)
+
+  const doCat = async () => {
+    if (!newCat.trim() || catSaving) return
+    setCatSaving(true); setCatErr('')
+    try {
+      const c = await addCategory(newCat.trim(), expType)
+      setCatId(c?.id ?? '')
+      setNewCat(''); setAddCat(false)
+    } catch (e: unknown) {
+      setCatErr(e instanceof Error ? e.message : '카테고리 추가 실패')
+    } finally { setCatSaving(false) }
+  }
+
+  const save = async () => {
+    const raw = Number(amount.replace(/,/g, ''))
+    if (!raw) { setError('금액을 입력해주세요.'); return }
+    setSaving(true); setError('')
+    try {
+      const d = new Date(date)
+      const res = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_type: 'expense',
+          amount: raw,
+          transaction_date: date,
+          description: desc || null,
+          memo: memo || null,
+          payment_method: payMethod || null,
+          income_source_id: null,
+          expense_category_id: catId || null,
+          expense_type: expType,
+          is_fixed: fixed,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok || result.error) throw new Error(result.error || '저장 실패')
+      clearTransactionCache(d.getFullYear(), d.getMonth() + 1)
+      setAmount(''); setDesc(''); setMemo(''); setPayMethod(''); setCatId('')
+      setToast(true)
+      setTimeout(() => setToast(false), 2000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '저장 실패')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={CARD}>
+      {/* 헤더 */}
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f3fb', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 36, height: 36, background: '#eef0fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
+          <TrendingDown size={18} />
+        </div>
+        <div>
+          <p style={{ fontSize: 16, fontWeight: 800, color: '#4f46e5' }}>지출 등록</p>
+          <p style={{ fontSize: 11, color: '#9ca3af' }}>사무실 / 개인 지출</p>
+        </div>
+      </div>
+
+      {/* 폼 */}
+      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* 날짜 */}
+        <div>
+          <span style={LABEL}>날짜</span>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={INP} />
+        </div>
+
+        {/* 금액 */}
+        <div>
+          <span style={LABEL}>금액 *</span>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 15, fontWeight: 800, color: '#9ca3af' }}>₩</span>
+            <input type="text" value={amount}
+              onChange={e => setAmount(fmt(e.target.value))}
+              placeholder="0"
+              style={{ ...INP, paddingLeft: 34, fontSize: 18, fontWeight: 800, color: '#4f46e5' }}
+            />
+          </div>
+          {amount && (
+            <p style={{ fontSize: 12, color: '#4f46e5', marginTop: 4, fontWeight: 700 }}>
+              {formatCurrency(Number(amount.replace(/,/g, '')))}원
+            </p>
+          )}
+        </div>
+
+        {/* 내역 */}
+        <div>
+          <span style={LABEL}>내역</span>
+          <input type="text" value={desc} onChange={e => setDesc(e.target.value)}
+            placeholder="예: 창고 임대료" style={INP} />
+        </div>
+
+        {/* 지출 구분 */}
+        <div>
+          <span style={LABEL}>지출 구분</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              { key: 'office' as const, label: '사무실', icon: <Building2 size={13}/>, active: { bg: '#eff6ff', border: '#bfdbfe', color: '#2563eb' } },
+              { key: 'personal' as const, label: '개인', icon: <User size={13}/>, active: { bg: '#fff7ed', border: '#fed7aa', color: '#ea580c' } },
+            ].map(opt => (
+              <button key={opt.key} type="button" onClick={() => { setExpType(opt.key); setCatId('') }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, ...BTN_PILL(expType === opt.key, opt.active) }}>
+                {opt.icon}{opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 비용 유형 */}
+        <div>
+          <span style={LABEL}>비용 유형</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              { key: false, label: '변동비', icon: <Zap size={13}/>, active: { bg: '#eef0fe', border: '#c7c3fa', color: '#4f46e5' } },
+              { key: true,  label: '고정비', icon: <Lock size={13}/>, active: { bg: '#f3f4f6', border: '#d1d5db', color: '#374151' } },
+            ].map(opt => (
+              <button key={String(opt.key)} type="button" onClick={() => setFixed(opt.key)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, ...BTN_PILL(fixed === opt.key, opt.active) }}>
+                {opt.icon}{opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 결제수단 */}
+        <div>
+          <span style={LABEL}>결제수단</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {PAYMENT_METHODS.map(pm => {
+              const active = payMethod === pm
+              const isCash = pm === '현금'
+              return (
+                <button key={pm} type="button" onClick={() => setPayMethod(active ? '' : pm)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    background: active ? (isCash ? '#ecfdf5' : '#eef0fe') : '#f3f4f6',
+                    border: `1.5px solid ${active ? (isCash ? '#6ee7b7' : '#c7c3fa') : '#e5e7eb'}`,
+                    color: active ? (isCash ? '#047857' : '#4f46e5') : '#6b7280',
+                  }}>
+                  {isCash ? <Banknote size={13}/> : <CreditCard size={13}/>}
+                  {pm}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* 카테고리 */}
+        <div>
+          <span style={LABEL}>카테고리</span>
+          {!addCat ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select value={catId} onChange={e => setCatId(e.target.value)} style={{ ...INP, flex: 1 }}>
+                <option value="">선택하세요</option>
+                {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button type="button" onClick={() => { setAddCat(true); setCatErr(''); setTimeout(() => newCatRef.current?.focus(), 50) }}
+                style={{ width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eef0fe', border: '1.5px solid #c7c3fa', color: '#4f46e5', cursor: 'pointer' }}>
+                <Plus size={16} />
+              </button>
+            </div>
+          ) : (
+            <div style={{ background: '#f8faff', border: '1.5px solid #c7c3fa', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: '#4f46e5' }}>새 {expType === 'office' ? '사무실' : '개인'} 카테고리</p>
+              <input ref={newCatRef} value={newCat} onChange={e => setNewCat(e.target.value)}
+                placeholder={expType === 'office' ? '예: 보관료, 광고비' : '예: 헬스장, 식비'}
+                style={INP}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); doCat() } }}
+              />
+              {catErr && <p style={{ fontSize: 12, color: '#dc2626' }}>{catErr}</p>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={doCat} disabled={!newCat.trim() || catSaving}
+                  style={{ flex: 1, padding: '9px', fontSize: 13, fontWeight: 800, cursor: 'pointer', background: '#4f46e5', color: '#fff', border: 'none', opacity: (!newCat.trim() || catSaving) ? 0.5 : 1 }}>
+                  <Check size={13} style={{ display: 'inline', marginRight: 5 }} />{catSaving ? '추가 중...' : '추가'}
+                </button>
+                <button type="button" onClick={() => { setAddCat(false); setNewCat(''); setCatErr('') }}
+                  style={{ padding: '9px 16px', fontSize: 13, cursor: 'pointer', background: '#f3f4f6', border: 'none', color: '#6b7280' }}>
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 메모 */}
+        <div>
+          <span style={LABEL}>메모 (선택)</span>
+          <textarea value={memo} onChange={e => setMemo(e.target.value)}
+            placeholder="추가 메모" rows={2} style={{ ...INP, resize: 'none' }} />
+        </div>
+
+        {error && (
+          <p style={{ fontSize: 13, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626' }}>
+            {error}
+          </p>
+        )}
+
+        <button type="button" onClick={save} disabled={saving}
+          style={{
+            padding: '13px', fontSize: 15, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer',
+            background: saving ? '#e0e7ff' : 'linear-gradient(135deg,#4f46e5,#7c72f0)',
+            color: '#fff', border: 'none', opacity: saving ? 0.7 : 1,
+          }}>
+          {saving ? '저장 중...' : '지출 저장하기'}
+        </button>
+      </div>
+      {toast && <Toast msg="✓ 지출이 등록되었습니다" />}
+    </div>
+  )
+}
+
+/* ── 메인 페이지 ── */
+export default function RegisterPage() {
+  return (
+    <div className="page-wrap" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div className="fade-up">
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--day-text1)' }}>내역 등록</h1>
+        <p style={{ fontSize: 13, color: 'var(--day-text3)', marginTop: 3 }}>수입과 지출을 직접 입력하세요</p>
+      </div>
+      <div className="register-layout fade-up">
+        <IncomeForm />
+        <ExpenseForm />
+      </div>
+    </div>
+  )
+}

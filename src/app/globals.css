@@ -58,7 +58,7 @@
 html { -webkit-text-size-adjust: 100%; }
 
 body {
-  font-family: 'Nanum Gothic', 'Apple SD Gothic Neo', '맑은 고딕', sans-serif;
+  font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Nanum Gothic', sans-serif;
   -webkit-font-smoothing: antialiased;
   font-size: 14px;
   line-height: 1.6;
@@ -139,3 +139,11 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
 @media (max-width: 767px) {
   .page-wrap { padding: 18px 16px calc(var(--nav-h) + 20px); }
 }
+
+/* ─── 캘린더 레이아웃 ─── */
+.cal-layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 900px) { .cal-layout { grid-template-columns: 1fr 360px; } }
+
+/* ─── 내역등록 레이아웃 ─── */
+.register-layout { display: grid; grid-template-columns: 1fr; gap: 20px; }
+@media (min-width: 768px) { .register-layout { grid-template-columns: 1fr 1fr; } }

@@ -9,6 +9,14 @@ import { Transaction, IncomeSource, ExpenseCategory, MonthlyStats } from '@/lib/
 // 인메모리 캐시
 const cache = new Map<string, Transaction[]>()
 
+export function clearTransactionCache(year?: number, month?: number) {
+  if (year !== undefined && month !== undefined) {
+    cache.delete(`${year}-${month}`)
+  } else {
+    cache.clear()
+  }
+}
+
 /* ══════════════════════════════
    거래 훅
 ══════════════════════════════ */

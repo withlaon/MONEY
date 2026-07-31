@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, ArrowLeftRight, BarChart3, Settings2, Wallet } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, BarChart3, Settings2, Wallet, PenLine } from 'lucide-react'
 
 const navItems = [
   { href: '/',             label: '대시보드',  icon: LayoutDashboard },
+  { href: '/register',     label: '내역등록',  icon: PenLine         },
   { href: '/transactions', label: '거래내역',  icon: ArrowLeftRight  },
   { href: '/analysis',     label: '분석/비교', icon: BarChart3       },
   { href: '/settings',     label: '설정',      icon: Settings2       },
