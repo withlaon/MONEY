@@ -117,6 +117,9 @@ function Toast({ msg }: { msg: string }) {
   )
 }
 
+type IncomeEntry = { cat: string; desc: string; amount: number }
+type ExpenseEntry = { desc: string; catName: string; expType: string; payMethod: string; amount: number }
+
 /* ── 수입 등록 폼 ── */
 function IncomeForm() {
   const { sources } = useIncomeSources()
@@ -130,6 +133,7 @@ function IncomeForm() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState(false)
+  const [savedList, setSavedList] = useState<IncomeEntry[]>([])
 
   const fmt = (v: string) => { const n = v.replace(/\D/g, ''); return n ? Number(n).toLocaleString('ko-KR') : '' }
 
@@ -163,6 +167,10 @@ function IncomeForm() {
       const result = await res.json()
       if (!res.ok || result.error) throw new Error(result.error || '저장 실패')
       clearTransactionCache(d.getFullYear(), d.getMonth() + 1)
+      // 당일 등록분만 목록에 추가
+      if (date === today()) {
+        setSavedList(prev => [...prev, { cat: incomeCat, desc: desc || incomeCat, amount: raw }])
+      }
       setAmount(''); setDesc(''); setMemo('')
       setToast(true)
       setTimeout(() => setToast(false), 2000)
@@ -172,6 +180,8 @@ function IncomeForm() {
       setSaving(false)
     }
   }
+
+  const todayTotal = savedList.reduce((s, e) => s + e.amount, 0)
 
   return (
     <div style={CARD}>
@@ -254,6 +264,27 @@ function IncomeForm() {
           }}>
           {saving ? '저장 중...' : '수입 저장하기'}
         </button>
+
+        {/* 당일 등록 목록 */}
+        {savedList.length > 0 && (
+          <div style={{ borderTop: '1px solid #e4e9f5', paddingTop: 14, marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#059669' }}>오늘 등록한 수입</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#059669' }}>합계 {formatCurrency(todayTotal)}원</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {savedList.map((e, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#f0fdf4', border: '1px solid #d1fae5' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#059669', padding: '2px 6px' }}>{e.cat}</span>
+                    <span style={{ fontSize: 12, color: '#374151' }}>{e.desc !== e.cat ? e.desc : ''}</span>
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#059669' }}>+{formatCurrency(e.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {toast && <Toast msg="✓ 수입이 등록되었습니다" />}
     </div>
@@ -275,6 +306,7 @@ function ExpenseForm() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState(false)
+  const [savedList, setSavedList] = useState<ExpenseEntry[]>([])
 
   const [addCat, setAddCat] = useState(false)
   const [newCat, setNewCat] = useState('')
@@ -322,6 +354,17 @@ function ExpenseForm() {
       const result = await res.json()
       if (!res.ok || result.error) throw new Error(result.error || '저장 실패')
       clearTransactionCache(d.getFullYear(), d.getMonth() + 1)
+      // 당일 등록분만 목록에 추가
+      if (date === today()) {
+        const catName = categories.find(c => c.id === catId)?.name || ''
+        setSavedList(prev => [...prev, {
+          desc: desc || catName || '지출',
+          catName,
+          expType,
+          payMethod,
+          amount: raw,
+        }])
+      }
       setAmount(''); setDesc(''); setMemo(''); setPayMethod(''); setCatId('')
       setToast(true)
       setTimeout(() => setToast(false), 2000)
@@ -329,6 +372,8 @@ function ExpenseForm() {
       setError(e instanceof Error ? e.message : '저장 실패')
     } finally { setSaving(false) }
   }
+
+  const todayTotal = savedList.reduce((s, e) => s + e.amount, 0)
 
   return (
     <div style={CARD}>
@@ -489,6 +534,31 @@ function ExpenseForm() {
           }}>
           {saving ? '저장 중...' : '지출 저장하기'}
         </button>
+
+        {/* 당일 등록 목록 */}
+        {savedList.length > 0 && (
+          <div style={{ borderTop: '1px solid #e4e9f5', paddingTop: 14, marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#4f46e5' }}>오늘 등록한 지출</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#4f46e5' }}>합계 {formatCurrency(todayTotal)}원</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {savedList.map((e, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fef2f2', border: '1px solid #fee2e2' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: e.expType === 'office' ? '#2563eb' : '#ea580c', padding: '2px 6px', flexShrink: 0 }}>
+                      {e.expType === 'office' ? '사무실' : '개인'}
+                    </span>
+                    {e.catName && <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0 }}>{e.catName}</span>}
+                    <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.desc !== e.catName ? e.desc : ''}</span>
+                    {e.payMethod && <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0 }}>{e.payMethod}</span>}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#dc2626', flexShrink: 0, marginLeft: 8 }}>-{formatCurrency(e.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {toast && <Toast msg="✓ 지출이 등록되었습니다" />}
     </div>
