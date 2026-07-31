@@ -50,6 +50,7 @@ const TITLE: React.CSSProperties = {
 
 export default function MonthlyCharts({ transactions, stats, year, month }: Props) {
   const [expandedCat, setExpandedCat] = useState<string | null>(null)
+  const [expandedPie, setExpandedPie] = useState<'expType' | 'fixed' | null>(null)
 
   /* 일별 데이터 */
   const daysInMonth = new Date(year, month, 0).getDate()
@@ -201,34 +202,122 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
 
           {stats.totalExpense>0 && (
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-              {expTypePie.length>0 && (
-                <div style={BOX}>
-                  <p style={{ ...TITLE, fontSize:12 }}>지출 구성</p>
-                  <ResponsiveContainer width="100%" height={140}>
-                    <PieChart>
-                      <Pie data={expTypePie} cx="50%" cy="50%" innerRadius={36} outerRadius={56} paddingAngle={4} dataKey="value">
-                        <Cell fill="#2563eb"/><Cell fill="#ea580c"/>
-                      </Pie>
-                      <Tooltip formatter={(v)=>formatCurrency(Number(v))} />
-                      <Legend wrapperStyle={{ fontSize:11, fontWeight:700 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              {fixedPie.length>0 && (
-                <div style={BOX}>
-                  <p style={{ ...TITLE, fontSize:12 }}>고정 · 변동</p>
-                  <ResponsiveContainer width="100%" height={140}>
-                    <PieChart>
-                      <Pie data={fixedPie} cx="50%" cy="50%" innerRadius={36} outerRadius={56} paddingAngle={4} dataKey="value">
-                        <Cell fill="#6b7280"/><Cell fill="#4f46e5"/>
-                      </Pie>
-                      <Tooltip formatter={(v)=>formatCurrency(Number(v))} />
-                      <Legend wrapperStyle={{ fontSize:11, fontWeight:700 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+
+              {/* ── 지출 구성 (사무실/개인) ── */}
+              {expTypePie.length>0 && (() => {
+                const isOpen = expandedPie === 'expType'
+                /* 사무실/개인별 → 카테고리별 합계 */
+                const groups = (['office','personal'] as const).map(type => {
+                  const label = type === 'office' ? '사무실' : '개인'
+                  const color = type === 'office' ? '#2563eb' : '#ea580c'
+                  const rows = transactions
+                    .filter(t => t.transaction_type==='expense' && t.expense_type===type)
+                    .reduce((acc: {name:string;amount:number}[], t) => {
+                      const n = t.expense_categories?.name || '기타'
+                      const ex = acc.find(a => a.name===n)
+                      if (ex) ex.amount += t.amount
+                      else acc.push({ name:n, amount:t.amount })
+                      return acc
+                    }, [])
+                    .sort((a,b)=>b.amount-a.amount)
+                  const total = rows.reduce((s,r)=>s+r.amount,0)
+                  return { label, color, rows, total }
+                }).filter(g=>g.total>0)
+                return (
+                  <div style={{ ...BOX, cursor:'pointer', userSelect:'none' }}
+                    onClick={() => setExpandedPie(isOpen ? null : 'expType')}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', ...TITLE }}>
+                      <span>지출 구성</span>
+                      <ChevronDown size={13} style={{ color:'#9ca3af', transform: isOpen ? 'rotate(180deg)' : 'none', transition:'0.2s', flexShrink:0 }} />
+                    </div>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <PieChart>
+                        <Pie data={expTypePie} cx="50%" cy="50%" innerRadius={36} outerRadius={56} paddingAngle={4} dataKey="value">
+                          <Cell fill="#2563eb"/><Cell fill="#ea580c"/>
+                        </Pie>
+                        <Tooltip formatter={(v)=>formatCurrency(Number(v))} />
+                        <Legend wrapperStyle={{ fontSize:11, fontWeight:700 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {isOpen && (
+                      <div style={{ borderTop:'1px solid #f3f4f6', marginTop:10, paddingTop:10, display:'flex', flexDirection:'column', gap:10 }}>
+                        {groups.map(g => (
+                          <div key={g.label}>
+                            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                              <span style={{ fontSize:11, fontWeight:800, color:g.color }}>{g.label}</span>
+                              <span style={{ fontSize:11, fontWeight:800, color:g.color }}>{formatCurrency(g.total)}</span>
+                            </div>
+                            {g.rows.map(r => (
+                              <div key={r.name} style={{ display:'flex', justifyContent:'space-between', paddingLeft:8, marginTop:3 }}>
+                                <span style={{ fontSize:10, color:'#6b7280' }}>{r.name}</span>
+                                <span style={{ fontSize:10, fontWeight:700, color:'#374151' }}>{formatCurrency(r.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── 고정 · 변동 ── */}
+              {fixedPie.length>0 && (() => {
+                const isOpen = expandedPie === 'fixed'
+                /* 고정/변동별 → 카테고리별 합계 */
+                const groups = ([true, false] as const).map(isFixed => {
+                  const label = isFixed ? '고정비' : '변동비'
+                  const color = isFixed ? '#6b7280' : '#4f46e5'
+                  const rows = transactions
+                    .filter(t => t.transaction_type==='expense' && t.is_fixed===isFixed)
+                    .reduce((acc: {name:string;amount:number}[], t) => {
+                      const n = t.expense_categories?.name || '기타'
+                      const ex = acc.find(a => a.name===n)
+                      if (ex) ex.amount += t.amount
+                      else acc.push({ name:n, amount:t.amount })
+                      return acc
+                    }, [])
+                    .sort((a,b)=>b.amount-a.amount)
+                  const total = rows.reduce((s,r)=>s+r.amount,0)
+                  return { label, color, rows, total }
+                }).filter(g=>g.total>0)
+                return (
+                  <div style={{ ...BOX, cursor:'pointer', userSelect:'none' }}
+                    onClick={() => setExpandedPie(isOpen ? null : 'fixed')}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', ...TITLE }}>
+                      <span>고정 · 변동</span>
+                      <ChevronDown size={13} style={{ color:'#9ca3af', transform: isOpen ? 'rotate(180deg)' : 'none', transition:'0.2s', flexShrink:0 }} />
+                    </div>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <PieChart>
+                        <Pie data={fixedPie} cx="50%" cy="50%" innerRadius={36} outerRadius={56} paddingAngle={4} dataKey="value">
+                          <Cell fill="#6b7280"/><Cell fill="#4f46e5"/>
+                        </Pie>
+                        <Tooltip formatter={(v)=>formatCurrency(Number(v))} />
+                        <Legend wrapperStyle={{ fontSize:11, fontWeight:700 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {isOpen && (
+                      <div style={{ borderTop:'1px solid #f3f4f6', marginTop:10, paddingTop:10, display:'flex', flexDirection:'column', gap:10 }}>
+                        {groups.map(g => (
+                          <div key={g.label}>
+                            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                              <span style={{ fontSize:11, fontWeight:800, color:g.color }}>{g.label}</span>
+                              <span style={{ fontSize:11, fontWeight:800, color:g.color }}>{formatCurrency(g.total)}</span>
+                            </div>
+                            {g.rows.map(r => (
+                              <div key={r.name} style={{ display:'flex', justifyContent:'space-between', paddingLeft:8, marginTop:3 }}>
+                                <span style={{ fontSize:10, color:'#6b7280' }}>{r.name}</span>
+                                <span style={{ fontSize:10, fontWeight:700, color:'#374151' }}>{formatCurrency(r.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )}
         </div>
