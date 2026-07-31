@@ -3,10 +3,161 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   TrendingUp, TrendingDown, Building2, User, Lock, Zap,
-  CreditCard, Banknote, Plus, Check, ChevronDown,
+  CreditCard, Banknote, Plus, Check, ChevronDown, CalendarClock,
 } from 'lucide-react'
 import { useIncomeSources, useExpenseCategories, useDescriptionPresets, clearTransactionCache } from '@/hooks/useTransactions'
 import { formatCurrency } from '@/lib/utils'
+
+/* ══════════════════════════════
+   카드 결제 예상액 패널
+══════════════════════════════ */
+
+function fmtDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+
+function mmdd(d: Date) {
+  return `${d.getMonth()+1}/${d.getDate()}`
+}
+
+function getCardBillingInfo(today: Date) {
+  const y = today.getFullYear()
+  const m = today.getMonth() // 0-indexed
+  const d = today.getDate()
+
+  /* 삼성카드: 결제일 10일, 전전월 29일 ~ 전월 28일 */
+  const samPayM = d > 10 ? m + 1 : m
+  const samPayY = samPayM > 11 ? y + 1 : y
+  const samPM   = samPayM % 12
+  const samPayDate = new Date(samPayY, samPM, 10)
+  const samStart   = new Date(samPayY, samPM - 2, 29)
+  const samEnd     = new Date(samPayY, samPM - 1, 28)
+
+  /* 현대카드: 결제일 1일, 전전월 20일 ~ 전월 19일 */
+  const hydPayM = d > 1 ? m + 1 : m
+  const hydPayY = hydPayM > 11 ? y + 1 : y
+  const hydPM   = hydPayM % 12
+  const hydPayDate = new Date(hydPayY, hydPM, 1)
+  const hydStart   = new Date(hydPayY, hydPM - 2, 20)
+  const hydEnd     = new Date(hydPayY, hydPM - 1, 19)
+
+  /* KB카드: 결제일 27일, 전월 14일 ~ 당월 13일 */
+  const kbPayM = d > 27 ? m + 1 : m
+  const kbPayY = kbPayM > 11 ? y + 1 : y
+  const kbPM   = kbPayM % 12
+  const kbPayDate = new Date(kbPayY, kbPM, 27)
+  const kbStart   = new Date(kbPayY, kbPM - 1, 14)
+  const kbEnd     = new Date(kbPayY, kbPM, 13)
+
+  return [
+    { key:'samsung', name:'삼성카드', method:'삼성카드', color:'#1d4ed8', accent:'#dbeafe',
+      payDate: samPayDate, start: samStart, end: samEnd },
+    { key:'hyundai', name:'현대카드', method:'현대카드', color:'#dc2626', accent:'#fee2e2',
+      payDate: hydPayDate, start: hydStart, end: hydEnd },
+    { key:'kb',      name:'KB카드',   method:'KB카드',   color:'#b45309', accent:'#fef3c7',
+      payDate: kbPayDate,  start: kbStart,  end: kbEnd  },
+  ]
+}
+
+type CardRow = { transaction_type: string; amount: number; payment_method: string; transaction_date: string }
+
+function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
+  const today = new Date()
+  const cards = getCardBillingInfo(today)
+  const [totals, setTotals] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const allStarts = cards.map(c => c.start)
+    const allEnds   = cards.map(c => c.end)
+    const minDate   = allStarts.reduce((a, b) => a < b ? a : b)
+    const maxDate   = allEnds.reduce((a, b) => a > b ? a : b)
+
+    fetch(`/api/transactions?start=${fmtDate(minDate)}&end=${fmtDate(maxDate)}&detail=1`)
+      .then(r => r.json())
+      .then((res: { data?: CardRow[] }) => {
+        const txs = res.data || []
+        const next: Record<string, number> = {}
+        for (const card of cards) {
+          const s = fmtDate(card.start), e = fmtDate(card.end)
+          next[card.key] = txs
+            .filter(t =>
+              t.transaction_type === 'expense' &&
+              t.payment_method === card.method &&
+              t.transaction_date >= s &&
+              t.transaction_date <= e
+            )
+            .reduce((sum, t) => sum + t.amount, 0)
+        }
+        setTotals(next)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger])
+
+  const daysUntil = (d: Date) => {
+    const ms = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+    return Math.round(ms / 86400000)
+  }
+
+  return (
+    <div style={{ background:'#fff', border:'1px solid var(--day-border)', boxShadow:'var(--day-shadow)' }}>
+      {/* 헤더 */}
+      <div style={{ padding:'16px 20px', borderBottom:'1px solid #f0f3fb', display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ width:36, height:36, background:'#f0f4ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#4f46e5' }}>
+          <CalendarClock size={18} />
+        </div>
+        <div>
+          <p style={{ fontSize:16, fontWeight:800, color:'#111827' }}>카드 예상 결제액</p>
+          <p style={{ fontSize:11, color:'#9ca3af' }}>다음 결제일 기준 청구 예정</p>
+        </div>
+      </div>
+
+      <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+        {loading ? (
+          <p style={{ fontSize:12, color:'#9ca3af' }}>조회 중...</p>
+        ) : cards.map(card => {
+          const total  = totals[card.key] || 0
+          const days   = daysUntil(card.payDate)
+          const dLabel = days === 0 ? '오늘 결제' : days > 0 ? `${days}일 후` : `${Math.abs(days)}일 전`
+          const isUrgent = days >= 0 && days <= 3
+
+          return (
+            <div key={card.key} style={{ border:`1px solid ${card.accent}`, background: total > 0 ? card.accent : '#fafafa' }}>
+              {/* 카드사명 + 결제일 */}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderBottom:`1px solid ${card.accent}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:13, fontWeight:800, color: card.color }}>{card.name}</span>
+                  <span style={{
+                    fontSize:10, fontWeight:700, padding:'2px 6px',
+                    background: isUrgent ? card.color : '#f3f4f6',
+                    color: isUrgent ? '#fff' : '#6b7280',
+                  }}>{dLabel}</span>
+                </div>
+                <span style={{ fontSize:11, color:'#9ca3af' }}>
+                  {card.payDate.getMonth()+1}월 {card.payDate.getDate()}일 결제
+                </span>
+              </div>
+
+              {/* 금액 + 사용기간 */}
+              <div style={{ padding:'10px 14px' }}>
+                <p style={{ fontSize:22, fontWeight:800, color: total > 0 ? card.color : '#d1d5db', lineHeight:1.2 }}>
+                  {total > 0 ? formatCurrency(total) : '—'}
+                  {total > 0 && <span style={{ fontSize:13, fontWeight:700, marginLeft:3 }}>원</span>}
+                </p>
+                <p style={{ fontSize:10, color:'#9ca3af', marginTop:5 }}>
+                  사용기간 {mmdd(card.start)} ~ {mmdd(card.end)}
+                </p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 const PAYMENT_METHODS = ['현금', '삼성카드', 'KB카드', '현대카드'] as const
 const INCOME_CATS = ['판매대금', '기타'] as const
@@ -292,7 +443,7 @@ function IncomeForm() {
 }
 
 /* ── 지출 등록 폼 ── */
-function ExpenseForm() {
+function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
   const { categories, addCategory } = useExpenseCategories()
 
   const [date, setDate] = useState(today())
@@ -365,6 +516,7 @@ function ExpenseForm() {
           amount: raw,
         }])
       }
+      onSaved?.()
       setAmount(''); setDesc(''); setMemo(''); setPayMethod(''); setCatId('')
       setToast(true)
       setTimeout(() => setToast(false), 2000)
@@ -567,6 +719,8 @@ function ExpenseForm() {
 
 /* ── 메인 페이지 ── */
 export default function RegisterPage() {
+  const [cardRefresh, setCardRefresh] = useState(0)
+
   return (
     <div className="page-wrap" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div className="fade-up">
@@ -575,7 +729,10 @@ export default function RegisterPage() {
       </div>
       <div className="register-layout fade-up">
         <IncomeForm />
-        <ExpenseForm />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <ExpenseForm onSaved={() => setCardRefresh(r => r + 1)} />
+          <CardSummaryPanel refreshTrigger={cardRefresh} />
+        </div>
       </div>
     </div>
   )

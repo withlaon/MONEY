@@ -26,11 +26,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ data: rows })
     }
 
-    /* 월간 통계용 (type,amount,expense_type,is_fixed만) */
+    /* 날짜 범위 조회 (통계 및 카드 결제 예상액 용) */
     const s = searchParams.get('start')
     const e = searchParams.get('end')
     if (s && e) {
-      const q = `select=transaction_type,amount,expense_type,is_fixed&transaction_date=gte.${s}&transaction_date=lte.${e}`
+      const detail = searchParams.get('detail') === '1'
+      const sel = detail
+        ? 'transaction_type,amount,expense_type,is_fixed,payment_method,transaction_date'
+        : 'transaction_type,amount,expense_type,is_fixed'
+      const q = `select=${sel}&transaction_date=gte.${s}&transaction_date=lte.${e}`
       const rows = await pgGet<Record<string, unknown>>('transactions', q)
       return NextResponse.json({ data: rows })
     }
