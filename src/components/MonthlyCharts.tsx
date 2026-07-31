@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
+import { ChevronDown } from 'lucide-react'
 import { Transaction, MonthlyStats } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
 
@@ -15,6 +17,10 @@ interface Props {
 }
 
 const COLORS = ['#4f46e5','#059669','#dc2626','#ea580c','#2563eb','#d97706','#7c3aed','#0891b2']
+
+/* 합산할 카테고리 목록 */
+const MERGE_CATS = ['매입원가', '물류비']
+const MERGED_LABEL = '매입원가·물류비'
 
 const CT = ({ active, payload, label }: { active?: boolean; payload?: Array<{name:string;value:number;color:string}>; label?: string }) => {
   if (!active || !payload?.length) return null
@@ -30,7 +36,6 @@ const CT = ({ active, payload, label }: { active?: boolean; payload?: Array<{nam
   )
 }
 
-/* 박스 공통 스타일 — borderRadius 제거 */
 const BOX: React.CSSProperties = {
   background: '#fff',
   border: '1px solid #e4e9f5',
@@ -44,6 +49,8 @@ const TITLE: React.CSSProperties = {
 }
 
 export default function MonthlyCharts({ transactions, stats, year, month }: Props) {
+  const [expandedCat, setExpandedCat] = useState<string | null>(null)
+
   /* 일별 데이터 */
   const daysInMonth = new Date(year, month, 0).getDate()
   const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
@@ -81,23 +88,29 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
       }, {} as Record<string,{ total:number; items:{desc:string;amount:number}[] }>)
   ).map(([name,d])=>({ name, ...d })).sort((a,b)=>b.total-a.total)
 
-  /* 카테고리별 지출 */
-  const expenseByCat = Object.entries(
-    transactions
-      .filter(t => t.transaction_type==='expense')
-      .reduce((acc, t) => {
-        const n = t.expense_categories?.name || '기타'
-        acc[n] = (acc[n]||0) + t.amount
-        return acc
-      }, {} as Record<string,number>)
-  ).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value).slice(0,8)
+  /* 카테고리별 지출 — 매입원가·물류비 합산, 세부 거래 보관 */
+  const expenseByCatMap: Record<string, { value: number; items: Transaction[] }> = {}
+  transactions
+    .filter(t => t.transaction_type === 'expense')
+    .forEach(t => {
+      const rawName = t.expense_categories?.name || '기타'
+      const name = MERGE_CATS.includes(rawName) ? MERGED_LABEL : rawName
+      if (!expenseByCatMap[name]) expenseByCatMap[name] = { value: 0, items: [] }
+      expenseByCatMap[name].value += t.amount
+      expenseByCatMap[name].items.push(t)
+    })
+
+  const expenseByCat = Object.entries(expenseByCatMap)
+    .map(([name, d]) => ({ name, ...d }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
 
   const yf = (v:number) =>
     v>=1000000 ? `${(v/1000000).toFixed(0)}M`
     : v>=1000  ? `${(v/1000).toFixed(0)}K`
     : `${v}`
 
-  const axStyle = { fill:'#9ca3af', fontSize:11, fontFamily:'Nanum Gothic, sans-serif' }
+  const axStyle = { fill:'#9ca3af', fontSize:11 }
   const gridStyle = { stroke:'#e4e9f5', strokeDasharray:'3 3' }
 
   if (!transactions.length) return null
@@ -105,9 +118,8 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
-      {/* 3열 레이아웃: 입금처별 수입 | 일별 차트 | 카테고리별 지출 */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:14 }}
-        className="charts-3col">
+      {/* 3열 레이아웃 */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:14 }} className="charts-3col">
         <style>{`
           @media(min-width:900px){
             .charts-3col{ grid-template-columns: 1fr 1.8fr 1fr !important; }
@@ -125,7 +137,6 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
                 const pct = stats.totalIncome>0 ? (src.total/stats.totalIncome)*100 : 0
                 return (
                   <div key={src.name}>
-                    {/* 소스 헤더 */}
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
                       <span style={{ fontSize:12, fontWeight:800, color:'#374151' }}>{src.name}</span>
                       <span style={{ fontSize:12, fontWeight:700, color:'#059669' }}>
@@ -133,11 +144,9 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
                         <span style={{ color:'#9ca3af', fontWeight:600, marginLeft:4 }}>({pct.toFixed(0)}%)</span>
                       </span>
                     </div>
-                    {/* 바 */}
                     <div style={{ height:5, background:'#f3f4f6', overflow:'hidden', marginBottom:4 }}>
                       <div style={{ height:'100%', width:`${pct}%`, background:COLORS[i%COLORS.length], transition:'width 0.6s ease' }} />
                     </div>
-                    {/* 판매대금 하위 항목 */}
                     {src.name==='판매대금' && src.items.length>0 && (
                       <div style={{ display:'flex', flexDirection:'column', gap:3, paddingLeft:10, borderLeft:'2px solid #a7f3d0', marginTop:6 }}>
                         {src.items
@@ -164,10 +173,8 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
           )}
         </div>
 
-        {/* ── 중앙: 월간분석 (일별 바 + 파이 차트) ── */}
+        {/* ── 중앙: 월간분석 ── */}
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-
-          {/* 일별 수입/지출 */}
           {dailyData.length>0 && (
             <div style={BOX}>
               <p style={TITLE}>일별 수입 · 지출</p>
@@ -192,7 +199,6 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
             </div>
           )}
 
-          {/* 지출 파이 */}
           {stats.totalExpense>0 && (
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
               {expTypePie.length>0 && (
@@ -204,7 +210,7 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
                         <Cell fill="#2563eb"/><Cell fill="#ea580c"/>
                       </Pie>
                       <Tooltip formatter={(v)=>formatCurrency(Number(v))} />
-                      <Legend wrapperStyle={{ fontSize:11, fontWeight:700, fontFamily:'Nanum Gothic, sans-serif' }} />
+                      <Legend wrapperStyle={{ fontSize:11, fontWeight:700 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -218,7 +224,7 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
                         <Cell fill="#6b7280"/><Cell fill="#4f46e5"/>
                       </Pie>
                       <Tooltip formatter={(v)=>formatCurrency(Number(v))} />
-                      <Legend wrapperStyle={{ fontSize:11, fontWeight:700, fontFamily:'Nanum Gothic, sans-serif' }} />
+                      <Legend wrapperStyle={{ fontSize:11, fontWeight:700 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -233,21 +239,112 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
           {expenseByCat.length===0 ? (
             <p style={{ fontSize:12, color:'#9ca3af' }}>지출 내역 없음</p>
           ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              {expenseByCat.map((item,i)=>{
+            <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+              {expenseByCat.map((item,i) => {
                 const pct = stats.totalExpense>0 ? (item.value/stats.totalExpense)*100 : 0
+                const color = COLORS[i%COLORS.length]
+                const isOpen = expandedCat === item.name
+                const isMerged = item.name === MERGED_LABEL
+
+                /* 세부 내역: 날짜+내역별 집계 */
+                const details = item.items
+                  .reduce((acc: { date: string; desc: string; origCat: string; amount: number }[], t) => {
+                    const key = `${t.transaction_date}__${t.description || '—'}__${t.expense_categories?.name || ''}`
+                    const ex = acc.find(a => `${a.date}__${a.desc}__${a.origCat}` === key)
+                    if (ex) ex.amount += t.amount
+                    else acc.push({
+                      date: t.transaction_date,
+                      desc: t.description || '—',
+                      origCat: t.expense_categories?.name || '',
+                      amount: t.amount,
+                    })
+                    return acc
+                  }, [])
+                  .sort((a, b) => b.amount - a.amount)
+
                 return (
-                  <div key={item.name}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                      <span style={{ fontSize:12, fontWeight:700, color:'#374151' }}>{item.name}</span>
-                      <span style={{ fontSize:12, fontWeight:700, color:COLORS[i%COLORS.length] }}>
-                        {formatCurrency(item.value)}
-                        <span style={{ color:'#9ca3af', fontWeight:600, marginLeft:3 }}>({pct.toFixed(0)}%)</span>
-                      </span>
+                  <div key={item.name} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    {/* 카테고리 행 — 클릭 가능 */}
+                    <div
+                      onClick={() => setExpandedCat(isOpen ? null : item.name)}
+                      style={{
+                        padding: '10px 0',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          {/* 색상 점 */}
+                          <div style={{ width:8, height:8, background:color, flexShrink:0 }} />
+                          <span style={{ fontSize:12, fontWeight:700, color:'#374151' }}>
+                            {item.name}
+                          </span>
+                          {isMerged && (
+                            <span style={{ fontSize:10, color:'#9ca3af', background:'#f3f4f6', padding:'1px 5px' }}>합산</span>
+                          )}
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ fontSize:12, fontWeight:700, color }}>
+                            {formatCurrency(item.value)}
+                            <span style={{ color:'#9ca3af', fontWeight:600, marginLeft:3 }}>({pct.toFixed(0)}%)</span>
+                          </span>
+                          <ChevronDown
+                            size={14}
+                            style={{
+                              color:'#9ca3af',
+                              transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                              transition: 'transform 0.2s',
+                              flexShrink: 0,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {/* 바 */}
+                      <div style={{ height:4, background:'#f3f4f6', overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${pct}%`, background:color, transition:'width 0.6s ease' }} />
+                      </div>
                     </div>
-                    <div style={{ height:5, background:'#f3f4f6', overflow:'hidden' }}>
-                      <div style={{ height:'100%', width:`${pct}%`, background:COLORS[i%COLORS.length], transition:'width 0.6s ease' }} />
-                    </div>
+
+                    {/* 세부 내역 펼침 */}
+                    {isOpen && (
+                      <div style={{
+                        borderLeft: `3px solid ${color}`,
+                        marginLeft: 8,
+                        marginBottom: 8,
+                        paddingLeft: 10,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                      }}>
+                        {/* 합산 카테고리는 원본 카테고리명 소제목 표시 */}
+                        {isMerged && (
+                          <p style={{ fontSize:10, fontWeight:700, color:'#9ca3af', marginBottom:2 }}>
+                            매입원가 + 물류비 합산
+                          </p>
+                        )}
+                        {details.length === 0 ? (
+                          <p style={{ fontSize:11, color:'#9ca3af' }}>세부 내역 없음</p>
+                        ) : (
+                          details.map((d, di) => (
+                            <div key={di} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                              <div style={{ minWidth:0 }}>
+                                <span style={{ fontSize:11, color:'#374151', fontWeight:600 }}>
+                                  {d.desc}
+                                </span>
+                                {isMerged && d.origCat && (
+                                  <span style={{ fontSize:10, color:'#9ca3af', marginLeft:4 }}>({d.origCat})</span>
+                                )}
+                                <span style={{ fontSize:10, color:'#d1d5db', marginLeft:4 }}>{d.date.slice(5)}</span>
+                              </div>
+                              <span style={{ fontSize:11, fontWeight:700, color, flexShrink:0 }}>
+                                {formatCurrency(d.amount)}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
