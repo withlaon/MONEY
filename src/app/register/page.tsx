@@ -729,10 +729,8 @@ export default function RegisterPage() {
       </div>
       <div className="register-layout fade-up">
         <IncomeForm />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <ExpenseForm onSaved={() => setCardRefresh(r => r + 1)} />
-          <CardSummaryPanel refreshTrigger={cardRefresh} />
-        </div>
+        <ExpenseForm onSaved={() => setCardRefresh(r => r + 1)} />
+        <CardSummaryPanel refreshTrigger={cardRefresh} />
       </div>
     </div>
   )
