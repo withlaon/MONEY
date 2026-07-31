@@ -3,7 +3,7 @@ import { pgGet, pgInsert, pgDelete, pgPatch } from '../_supabase'
 
 const TX_SELECT = [
   'id', 'transaction_type', 'amount', 'transaction_date',
-  'description', 'memo', 'expense_type', 'is_fixed', 'payment_method',
+  'description', 'memo', 'expense_type', 'is_fixed', 'payment_method', 'installment_months',
   'income_source_id', 'expense_category_id',
   'income_sources(id,name)',
   'expense_categories(id,name,type)',
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     if (s && e) {
       const detail = searchParams.get('detail') === '1'
       const sel = detail
-        ? 'transaction_type,amount,expense_type,is_fixed,payment_method,transaction_date'
+        ? 'transaction_type,amount,expense_type,is_fixed,payment_method,transaction_date,installment_months'
         : 'transaction_type,amount,expense_type,is_fixed'
       const q = `select=${sel}&transaction_date=gte.${s}&transaction_date=lte.${e}`
       const rows = await pgGet<Record<string, unknown>>('transactions', q)

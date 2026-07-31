@@ -59,7 +59,18 @@ function getCardBillingInfo(today: Date) {
   ]
 }
 
-type CardRow = { transaction_type: string; amount: number; payment_method: string; transaction_date: string }
+type CardRow = {
+  transaction_type: string; amount: number
+  payment_method: string | null; transaction_date: string
+  installment_months?: number | null
+}
+
+/* 달 차이 (양수 = txDate가 billingEnd보다 이전) */
+const monthsBefore = (txDate: Date, billingEnd: Date) =>
+  (billingEnd.getFullYear() - txDate.getFullYear()) * 12 +
+  (billingEnd.getMonth() - txDate.getMonth())
+
+const LOOKBACK = 36 // 최대 할부 개월 수
 
 function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
   const today = new Date()
@@ -68,10 +79,12 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const allStarts = cards.map(c => c.start)
-    const allEnds   = cards.map(c => c.end)
-    const minDate   = allStarts.reduce((a, b) => a < b ? a : b)
-    const maxDate   = allEnds.reduce((a, b) => a > b ? a : b)
+    const allEnds = cards.map(c => c.end)
+    const maxDate = allEnds.reduce((a, b) => a > b ? a : b)
+
+    // 할부 조회를 위해 최대 할부 개월수만큼 과거로 확장
+    const minDate = new Date(maxDate)
+    minDate.setMonth(minDate.getMonth() - LOOKBACK + 1)
 
     fetch(`/api/transactions?start=${fmtDate(minDate)}&end=${fmtDate(maxDate)}&detail=1`)
       .then(r => r.json())
@@ -79,15 +92,17 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
         const txs = res.data || []
         const next: Record<string, number> = {}
         for (const card of cards) {
-          const s = fmtDate(card.start), e = fmtDate(card.end)
           next[card.key] = txs
-            .filter(t =>
-              t.transaction_type === 'expense' &&
-              t.payment_method === card.method &&
-              t.transaction_date >= s &&
-              t.transaction_date <= e
-            )
-            .reduce((sum, t) => sum + t.amount, 0)
+            .filter(t => t.transaction_type === 'expense' && t.payment_method === card.method)
+            .reduce((sum, t) => {
+              const months = t.installment_months && t.installment_months > 1 ? t.installment_months : 1
+              const txDate = new Date(t.transaction_date)
+              const mAgo   = monthsBefore(txDate, card.end) // 0 = 이번 결제, 1 = 지난 결제, ...
+              if (mAgo >= 0 && mAgo < months) {
+                return sum + (months === 1 ? t.amount : Math.round(t.amount / months))
+              }
+              return sum
+            }, 0)
         }
         setTotals(next)
         setLoading(false)
@@ -144,11 +159,14 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
               {/* 금액 + 사용기간 */}
               <div style={{ padding:'10px 14px' }}>
                 <p style={{ fontSize:22, fontWeight:800, color: total > 0 ? card.color : '#d1d5db', lineHeight:1.2 }}>
-                  {total > 0 ? formatCurrency(total) : '—'}
+                  {total > 0 ? formatCurrency(Math.round(total)) : '—'}
                   {total > 0 && <span style={{ fontSize:13, fontWeight:700, marginLeft:3 }}>원</span>}
                 </p>
                 <p style={{ fontSize:10, color:'#9ca3af', marginTop:5 }}>
                   사용기간 {mmdd(card.start)} ~ {mmdd(card.end)}
+                </p>
+                <p style={{ fontSize:10, color:'#b0b7c3', marginTop:2 }}>
+                  * 할부는 회차별 금액으로 산정
                 </p>
               </div>
             </div>
@@ -268,8 +286,11 @@ function Toast({ msg }: { msg: string }) {
   )
 }
 
+const INSTALLMENT_OPTIONS = [2, 3, 6, 9, 12, 18, 24, 36]
+const CARD_METHODS = ['삼성카드', 'KB카드', '현대카드']
+
 type IncomeEntry = { cat: string; desc: string; amount: number }
-type ExpenseEntry = { desc: string; catName: string; expType: string; payMethod: string; amount: number }
+type ExpenseEntry = { desc: string; catName: string; expType: string; payMethod: string; amount: number; installMonths: number }
 
 /* ── 수입 등록 폼 ── */
 function IncomeForm() {
@@ -458,6 +479,8 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
   const [error, setError] = useState('')
   const [toast, setToast] = useState(false)
   const [savedList, setSavedList] = useState<ExpenseEntry[]>([])
+  const [installType, setInstallType] = useState<'일시불' | '할부'>('일시불')
+  const [installMonths, setInstallMonths] = useState(3)
 
   const [addCat, setAddCat] = useState(false)
   const [newCat, setNewCat] = useState('')
@@ -496,6 +519,7 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
           description: desc || null,
           memo: memo || null,
           payment_method: payMethod || null,
+          installment_months: CARD_METHODS.includes(payMethod) && installType === '할부' ? installMonths : 1,
           income_source_id: null,
           expense_category_id: catId || null,
           expense_type: expType,
@@ -508,12 +532,14 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
       // 당일 등록분만 목록에 추가
       if (date === today()) {
         const catName = categories.find(c => c.id === catId)?.name || ''
+        const iM = CARD_METHODS.includes(payMethod) && installType === '할부' ? installMonths : 1
         setSavedList(prev => [...prev, {
           desc: desc || catName || '지출',
           catName,
           expType,
           payMethod,
           amount: raw,
+          installMonths: iM,
         }])
       }
       onSaved?.()
@@ -628,6 +654,41 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
           </div>
         </div>
 
+        {/* 결제 방식 (카드 선택 시에만) */}
+        {CARD_METHODS.includes(payMethod) && (
+          <div>
+            <span style={LABEL}>결제 방식</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              {(['일시불', '할부'] as const).map(opt => (
+                <button key={opt} type="button" onClick={() => setInstallType(opt)}
+                  style={BTN_PILL(installType === opt, { bg: '#eef0fe', border: '#c7c3fa', color: '#4f46e5' })}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+            {installType === '할부' && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {INSTALLMENT_OPTIONS.map(m => (
+                  <button key={m} type="button" onClick={() => setInstallMonths(m)}
+                    style={{
+                      padding: '6px 11px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      background: installMonths === m ? '#4f46e5' : '#f3f4f6',
+                      color: installMonths === m ? '#fff' : '#6b7280',
+                      border: `1px solid ${installMonths === m ? '#4f46e5' : '#e5e7eb'}`,
+                    }}>
+                    {m}개월
+                  </button>
+                ))}
+              </div>
+            )}
+            {installType === '할부' && (
+              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+                월 {formatCurrency(Math.round(Number(amount.replace(/,/g,'') || 0) / installMonths))}원 × {installMonths}개월
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 카테고리 */}
         <div>
           <span style={LABEL}>카테고리</span>
@@ -696,16 +757,25 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {savedList.map((e, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fef2f2', border: '1px solid #fee2e2' }}>
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fef2f2', border: '1px solid #fee2e2' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: e.expType === 'office' ? '#2563eb' : '#ea580c', padding: '2px 6px', flexShrink: 0 }}>
                       {e.expType === 'office' ? '사무실' : '개인'}
                     </span>
                     {e.catName && <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0 }}>{e.catName}</span>}
                     <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.desc !== e.catName ? e.desc : ''}</span>
-                    {e.payMethod && <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0 }}>{e.payMethod}</span>}
+                    {e.payMethod && (
+                      <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0 }}>
+                        {e.payMethod}{e.installMonths > 1 ? ` ${e.installMonths}개월 할부` : ' 일시불'}
+                      </span>
+                    )}
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#dc2626', flexShrink: 0, marginLeft: 8 }}>-{formatCurrency(e.amount)}</span>
+                  <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#dc2626' }}>-{formatCurrency(e.amount)}</div>
+                    {e.installMonths > 1 && (
+                      <div style={{ fontSize: 10, color: '#9ca3af' }}>월 {formatCurrency(Math.round(e.amount / e.installMonths))}</div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

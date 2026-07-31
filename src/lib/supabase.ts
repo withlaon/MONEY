@@ -29,6 +29,7 @@ export interface Transaction {
   description: string | null
   memo: string | null
   payment_method: string | null
+  installment_months: number | null   // 1 = 일시불, N = N개월 할부
   income_source_id: string | null
   expense_category_id: string | null
   expense_type: 'office' | 'personal' | null

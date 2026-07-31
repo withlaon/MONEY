@@ -8,6 +8,8 @@ import { useIncomeSources, useExpenseCategories, useDescriptionPresets } from '@
 
 const PAYMENT_METHODS = ['현금', '삼성카드', 'KB카드', '현대카드'] as const
 const INCOME_CATS = ['판매대금', '기타'] as const
+const CARD_METHODS_SET = new Set(['삼성카드', 'KB카드', '현대카드'])
+const INSTALLMENT_OPTIONS = [2, 3, 6, 9, 12, 18, 24, 36]
 
 interface Props {
   onSubmit: (d: Omit<Transaction, 'id'|'created_at'|'updated_at'|'income_sources'|'expense_categories'>) => Promise<void>
@@ -154,7 +156,14 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
   const [catId,      setCatId]      = useState(initialValues?.expense_category_id ?? '')
   const [expType,    setExpType]    = useState<'office'|'personal'>(initialValues?.expense_type ?? 'office')
   const [fixed,      setFixed]      = useState(initialValues?.is_fixed ?? false)
-  const [payMethod,  setPayMethod]  = useState(initialValues?.payment_method ?? '')
+  const [payMethod,      setPayMethod]      = useState(initialValues?.payment_method ?? '')
+  const [installType,    setInstallType]    = useState<'일시불'|'할부'>(
+    initialValues?.installment_months && initialValues.installment_months > 1 ? '할부' : '일시불'
+  )
+  const [installMonths,  setInstallMonths]  = useState(
+    initialValues?.installment_months && initialValues.installment_months > 1
+      ? initialValues.installment_months : 3
+  )
   const [incomeCat,  setIncomeCat]  = useState<'판매대금'|'기타'>(() => initIncomeCat() as '판매대금'|'기타')
   const [saving,     setSaving]     = useState(false)
   const [error,      setError]      = useState('')
@@ -191,6 +200,8 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
         description: desc || null,
         memo: memo || null,
         payment_method: type === 'expense' ? (payMethod || null) : null,
+        installment_months: type === 'expense' && CARD_METHODS_SET.has(payMethod) && installType === '할부'
+          ? installMonths : 1,
         income_source_id:    type === 'income'  ? resolveIncomeSrcId() : null,
         expense_category_id: type === 'expense' ? (catId || null) : null,
         expense_type: type === 'expense' ? expType : null,
@@ -444,6 +455,48 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                   })}
                 </div>
               </div>
+
+              {/* 결제 방식 (카드 선택 시에만) */}
+              {CARD_METHODS_SET.has(payMethod) && (
+                <div>
+                  <Label t="결제 방식" />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                    {(['일시불', '할부'] as const).map(opt => (
+                      <button key={opt} type="button" onClick={() => setInstallType(opt)}
+                        style={{
+                          padding: '10px 8px', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                          background: installType === opt ? '#eef0fe' : '#f8faff',
+                          border: `1.5px solid ${installType === opt ? '#c7c3fa' : '#e4e9f5'}`,
+                          color: installType === opt ? '#4f46e5' : '#9ca3af',
+                        }}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  {installType === '할부' && (
+                    <>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {INSTALLMENT_OPTIONS.map(m => (
+                          <button key={m} type="button" onClick={() => setInstallMonths(m)}
+                            style={{
+                              padding: '6px 11px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                              background: installMonths === m ? '#4f46e5' : '#f3f4f6',
+                              color: installMonths === m ? '#fff' : '#6b7280',
+                              border: `1px solid ${installMonths === m ? '#4f46e5' : '#e5e7eb'}`,
+                            }}>
+                            {m}개월
+                          </button>
+                        ))}
+                      </div>
+                      <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+                        월 {Number(amount.replace(/,/g,'') || 0) > 0
+                          ? `${Number(Math.round(Number(amount.replace(/,/g,'')) / installMonths)).toLocaleString('ko-KR')}원`
+                          : '—'} × {installMonths}개월
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* 카테고리 */}
               <div>
