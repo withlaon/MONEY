@@ -20,42 +20,57 @@ function mmdd(d: Date) {
   return `${d.getMonth()+1}/${d.getDate()}`
 }
 
-function getCardBillingInfo(today: Date) {
-  const y = today.getFullYear()
-  const m = today.getMonth() // 0-indexed
+type BillingPeriod = { payDate: Date; start: Date; end: Date }
+type CardInfo = {
+  key: string; name: string; method: string; color: string; accent: string
+  periods: [BillingPeriod, BillingPeriod] // [이번 결제, 다음 결제]
+}
+
+/**
+ * 결제일(payDay), 청구기간 오프셋을 받아 오늘 기준 upcoming 2개 기간 반환
+ * sMOff/sDay: 청구시작 = 결제월+sMOff 의 sDay 일
+ * eMOff/eDay: 청구종료 = 결제월+eMOff 의 eDay 일
+ */
+function genPeriods(
+  today: Date,
+  payDay: number,
+  sMOff: number, sDay: number,
+  eMOff: number, eDay: number,
+): [BillingPeriod, BillingPeriod] {
   const d = today.getDate()
+  const baseM = today.getMonth()
+  const baseY = today.getFullYear()
+  // 오늘이 결제일 이전이면 이번 달이 결제월, 이후면 다음 달
+  const firstPayM = d <= payDay ? baseM : baseM + 1
+  return [0, 1].map(i => {
+    const pm = firstPayM + i
+    const pY = baseY + Math.floor(pm / 12)
+    const pM = pm % 12
+    return {
+      payDate: new Date(pY, pM, payDay),
+      start:   new Date(pY, pM + sMOff, sDay),
+      end:     new Date(pY, pM + eMOff, eDay),
+    }
+  }) as [BillingPeriod, BillingPeriod]
+}
 
-  /* 삼성카드: 결제일 10일, 전전월 29일 ~ 전월 28일 */
-  const samPayM = d > 10 ? m + 1 : m
-  const samPayY = samPayM > 11 ? y + 1 : y
-  const samPM   = samPayM % 12
-  const samPayDate = new Date(samPayY, samPM, 10)
-  const samStart   = new Date(samPayY, samPM - 2, 29)
-  const samEnd     = new Date(samPayY, samPM - 1, 28)
-
-  /* 현대카드: 결제일 1일, 전전월 20일 ~ 전월 19일 */
-  const hydPayM = d > 1 ? m + 1 : m
-  const hydPayY = hydPayM > 11 ? y + 1 : y
-  const hydPM   = hydPayM % 12
-  const hydPayDate = new Date(hydPayY, hydPM, 1)
-  const hydStart   = new Date(hydPayY, hydPM - 2, 20)
-  const hydEnd     = new Date(hydPayY, hydPM - 1, 19)
-
-  /* KB카드: 결제일 27일, 전월 14일 ~ 당월 13일 */
-  const kbPayM = d > 27 ? m + 1 : m
-  const kbPayY = kbPayM > 11 ? y + 1 : y
-  const kbPM   = kbPayM % 12
-  const kbPayDate = new Date(kbPayY, kbPM, 27)
-  const kbStart   = new Date(kbPayY, kbPM - 1, 14)
-  const kbEnd     = new Date(kbPayY, kbPM, 13)
-
+function getCardBillingInfo(today: Date): CardInfo[] {
   return [
-    { key:'samsung', name:'삼성카드', method:'삼성카드', color:'#1d4ed8', accent:'#dbeafe',
-      payDate: samPayDate, start: samStart, end: samEnd },
-    { key:'hyundai', name:'현대카드', method:'현대카드', color:'#dc2626', accent:'#fee2e2',
-      payDate: hydPayDate, start: hydStart, end: hydEnd },
-    { key:'kb',      name:'KB카드',   method:'KB카드',   color:'#b45309', accent:'#fef3c7',
-      payDate: kbPayDate,  start: kbStart,  end: kbEnd  },
+    {
+      key:'samsung', name:'삼성카드', method:'삼성카드', color:'#1d4ed8', accent:'#dbeafe',
+      // 결제일 10일 / 청구: 결제월-2의 29일 ~ 결제월-1의 28일
+      periods: genPeriods(today, 10, -2, 29, -1, 28),
+    },
+    {
+      key:'hyundai', name:'현대카드', method:'현대카드', color:'#dc2626', accent:'#fee2e2',
+      // 결제일 1일 / 청구: 결제월-2의 20일 ~ 결제월-1의 19일
+      periods: genPeriods(today, 1, -2, 20, -1, 19),
+    },
+    {
+      key:'kb', name:'KB카드', method:'KB카드', color:'#b45309', accent:'#fef3c7',
+      // 결제일 27일 / 청구: 결제월-1의 14일 ~ 결제월의 13일
+      periods: genPeriods(today, 27, -1, 14, 0, 13),
+    },
   ]
 }
 
@@ -68,54 +83,59 @@ type CardRow = {
 const LOOKBACK = 36 // 최대 할부 개월 수
 
 /**
- * 이 결제기간([start, end]) 기준으로 해당 거래가 몇 번째 회차인지 반환
- * 0  = 이번 결제기간 안에 있음 (1회차)
- * 1  = 1개월 전 기간 (2회차)
- * -1 = 결제기간 이후 (미래) → 제외
+ * 결제기간([start, end]) 기준으로 거래의 해당 회차 오프셋 반환
+ *  0  = 이번 기간 내 (1회차)
+ *  N  = N개월 이전 기간 (N+1회차)
+ * -1  = 기간 이후 (미래) → 제외
  */
 function billingOffset(txDate: Date, cardStart: Date, cardEnd: Date): number {
   const tx = txDate.getTime()
-  if (tx >= cardStart.getTime() && tx <= cardEnd.getTime()) return 0 // 이번 기간 내
-  if (tx > cardEnd.getTime()) return -1 // 미래
-  // tx < cardStart: 몇 개월 이전인지 (카드 시작월 기준 month diff)
+  if (tx >= cardStart.getTime() && tx <= cardEnd.getTime()) return 0
+  if (tx > cardEnd.getTime()) return -1
   const diff =
     (cardStart.getFullYear() - txDate.getFullYear()) * 12 +
-    (cardStart.getMonth() - txDate.getMonth())
+    (cardStart.getMonth()    - txDate.getMonth())
   return diff > 0 ? diff : 1
+}
+
+/** 기간 내 카드 지출 합산 (할부 회차 분할 포함) */
+function sumForPeriod(txs: CardRow[], method: string, period: BillingPeriod): number {
+  return txs
+    .filter(t => t.transaction_type === 'expense' && t.payment_method === method)
+    .reduce((sum, t) => {
+      const months = t.installment_months && t.installment_months > 1 ? t.installment_months : 1
+      const txDate = new Date(t.transaction_date)
+      const offset = billingOffset(txDate, period.start, period.end)
+      if (offset >= 0 && offset < months) return sum + Math.round(t.amount / months)
+      return sum
+    }, 0)
 }
 
 function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
   const today = new Date()
   const cards = getCardBillingInfo(today)
-  const [totals, setTotals] = useState<Record<string, number>>({})
+  // totals[cardKey] = [이번결제액, 다음결제액]
+  const [totals, setTotals] = useState<Record<string, [number, number]>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const allEnds   = cards.map(c => c.end)
-    const allStarts = cards.map(c => c.start)
-    const maxDate = allEnds.reduce((a, b) => a > b ? a : b)
-    // 할부 조회를 위해 최대 할부 개월수만큼 과거로 확장 (시작일 기준)
-    const minDate = allStarts.reduce((a, b) => a < b ? a : b)
+    // 조회 범위: 모든 카드 period[0].start 중 최솟값 - LOOKBACK  ~  period[1].end 중 최댓값
+    const allStarts = cards.map(c => c.periods[0].start)
+    const allEnds   = cards.map(c => c.periods[1].end)
+    const minDate = new Date(allStarts.reduce((a, b) => a < b ? a : b))
     minDate.setMonth(minDate.getMonth() - LOOKBACK)
+    const maxDate = allEnds.reduce((a, b) => a > b ? a : b)
 
     fetch(`/api/transactions?start=${fmtDate(minDate)}&end=${fmtDate(maxDate)}&detail=1`)
       .then(r => r.json())
       .then((res: { data?: CardRow[] }) => {
         const txs = res.data || []
-        const next: Record<string, number> = {}
+        const next: Record<string, [number, number]> = {}
         for (const card of cards) {
-          next[card.key] = txs
-            .filter(t => t.transaction_type === 'expense' && t.payment_method === card.method)
-            .reduce((sum, t) => {
-              const months = t.installment_months && t.installment_months > 1 ? t.installment_months : 1
-              const txDate = new Date(t.transaction_date)
-              const offset = billingOffset(txDate, card.start, card.end)
-              // offset=0 → 1회차, offset=1 → 2회차, ..., offset=months-1 → 마지막 회차
-              if (offset >= 0 && offset < months) {
-                return sum + Math.round(t.amount / months)
-              }
-              return sum
-            }, 0)
+          next[card.key] = [
+            sumForPeriod(txs, card.method, card.periods[0]),
+            sumForPeriod(txs, card.method, card.periods[1]),
+          ]
         }
         setTotals(next)
         setLoading(false)
@@ -139,7 +159,7 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
         </div>
         <div>
           <p style={{ fontSize:16, fontWeight:800, color:'#111827' }}>카드 예상 결제액</p>
-          <p style={{ fontSize:11, color:'#9ca3af' }}>다음 결제일 기준 청구 예정</p>
+          <p style={{ fontSize:11, color:'#9ca3af' }}>이번·다음 결제일 청구 예정액</p>
         </div>
       </div>
 
@@ -147,14 +167,16 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
         {loading ? (
           <p style={{ fontSize:12, color:'#9ca3af' }}>조회 중...</p>
         ) : cards.map(card => {
-          const total  = totals[card.key] || 0
-          const days   = daysUntil(card.payDate)
-          const dLabel = days === 0 ? '오늘 결제' : days > 0 ? `${days}일 후` : `${Math.abs(days)}일 전`
-          const isUrgent = days >= 0 && days <= 3
+          const [cur, nxt] = totals[card.key] ?? [0, 0]
+          const p0 = card.periods[0]
+          const p1 = card.periods[1]
+          const days0    = daysUntil(p0.payDate)
+          const dLabel0  = days0 === 0 ? '오늘 결제' : days0 > 0 ? `${days0}일 후` : `${Math.abs(days0)}일 전`
+          const isUrgent = days0 >= 0 && days0 <= 3
 
           return (
-            <div key={card.key} style={{ border:`1px solid ${card.accent}`, background: total > 0 ? card.accent : '#fafafa' }}>
-              {/* 카드사명 + 결제일 */}
+            <div key={card.key} style={{ border:`1px solid ${card.accent}`, background: cur > 0 ? card.accent : '#fafafa' }}>
+              {/* 카드사명 + 이번 결제일 */}
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderBottom:`1px solid ${card.accent}` }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <span style={{ fontSize:13, fontWeight:800, color: card.color }}>{card.name}</span>
@@ -162,29 +184,47 @@ function CardSummaryPanel({ refreshTrigger }: { refreshTrigger: number }) {
                     fontSize:10, fontWeight:700, padding:'2px 6px',
                     background: isUrgent ? card.color : '#f3f4f6',
                     color: isUrgent ? '#fff' : '#6b7280',
-                  }}>{dLabel}</span>
+                  }}>{dLabel0}</span>
                 </div>
                 <span style={{ fontSize:11, color:'#9ca3af' }}>
-                  {card.payDate.getMonth()+1}월 {card.payDate.getDate()}일 결제
+                  {p0.payDate.getMonth()+1}월 {p0.payDate.getDate()}일 결제
                 </span>
               </div>
 
-              {/* 금액 + 사용기간 */}
-              <div style={{ padding:'10px 14px' }}>
-                <p style={{ fontSize:22, fontWeight:800, color: total > 0 ? card.color : '#d1d5db', lineHeight:1.2 }}>
-                  {total > 0 ? formatCurrency(Math.round(total)) : '—'}
-                  {total > 0 && <span style={{ fontSize:13, fontWeight:700, marginLeft:3 }}>원</span>}
+              {/* 이번 결제 금액 + 사용기간 */}
+              <div style={{ padding:'10px 14px 8px' }}>
+                <p style={{ fontSize:22, fontWeight:800, color: cur > 0 ? card.color : '#d1d5db', lineHeight:1.2 }}>
+                  {cur > 0 ? formatCurrency(Math.round(cur)) : '—'}
+                  {cur > 0 && <span style={{ fontSize:13, fontWeight:700, marginLeft:3 }}>원</span>}
                 </p>
-                <p style={{ fontSize:10, color:'#9ca3af', marginTop:5 }}>
-                  사용기간 {mmdd(card.start)} ~ {mmdd(card.end)}
+                <p style={{ fontSize:10, color:'#9ca3af', marginTop:4 }}>
+                  사용기간 {mmdd(p0.start)} ~ {mmdd(p0.end)}
                 </p>
-                <p style={{ fontSize:10, color:'#b0b7c3', marginTop:2 }}>
-                  * 할부는 회차별 금액으로 산정
+              </div>
+
+              {/* 다음 결제 구분선 + 금액 */}
+              <div style={{
+                borderTop: `1px dashed ${card.accent}`,
+                margin: '0 14px',
+                padding: '8px 0 10px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <div>
+                  <p style={{ fontSize:10, fontWeight:800, color:'#9ca3af' }}>
+                    다음 결제 &nbsp;·&nbsp; {p1.payDate.getMonth()+1}/{p1.payDate.getDate()}
+                  </p>
+                  <p style={{ fontSize:10, color:'#b0b7c3', marginTop:2 }}>
+                    {mmdd(p1.start)} ~ {mmdd(p1.end)}
+                  </p>
+                </div>
+                <p style={{ fontSize:15, fontWeight:800, color: nxt > 0 ? card.color : '#d1d5db' }}>
+                  {nxt > 0 ? `${formatCurrency(Math.round(nxt))}원` : '—'}
                 </p>
               </div>
             </div>
           )
         })}
+        <p style={{ fontSize:10, color:'#b0b7c3', textAlign:'center' }}>* 할부는 회차별 금액으로 산정</p>
       </div>
     </div>
   )
