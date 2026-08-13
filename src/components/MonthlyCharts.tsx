@@ -104,7 +104,6 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
   const expenseByCat = Object.entries(expenseByCatMap)
     .map(([name, d]) => ({ name, ...d }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 8)
 
   const yf = (v:number) =>
     v>=1000000 ? `${(v/1000000).toFixed(0)}M`
