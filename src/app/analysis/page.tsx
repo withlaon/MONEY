@@ -186,7 +186,7 @@ function MonthlyReport({
         boxShadow: '0 1px 3px rgba(17,24,39,0.06)', padding: '20px 22px',
       }}>
         <p style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 14, borderBottom: '2px solid #4f46e5', paddingBottom: 6 }}>요약</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 10 }} className="report-summary-grid">
+        <div className="report-summary-grid">
           {[
             { label: '총 수입', value: totalIncome, color: '#059669', bg: '#f0fdf4', bd: '#a7f3d0' },
             { label: '총 지출', value: totalExpense, color: '#dc2626', bg: '#fef2f2', bd: '#fca5a5' },
@@ -217,7 +217,7 @@ function MonthlyReport({
       </div>
 
       {/* ── 상세 수입 + 상세 지출 ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }} className="report-detail-grid">
+      <div className="report-detail-grid">
 
         {/* 상세 수입 */}
         <div style={{ background: '#fff', border: '1px solid #e4e9f5', boxShadow: '0 1px 3px rgba(17,24,39,0.06)', padding: '20px 22px' }}>
