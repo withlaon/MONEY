@@ -170,31 +170,53 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
 }
 
 /* ─── 인쇄 ─── */
-@page { margin: 14mm 12mm; }
+@page { margin: 14mm 12mm; size: A4; }
 
 @media print {
-  /* 숨김 */
+  /* ── overflow 해제: 스크롤 영역 전체 출력 ── */
+  html, body {
+    overflow: visible !important;
+    height: auto !important;
+    display: block !important;
+    background: #fff !important;
+    font-size: 11px !important;
+  }
+  main, .main-content, .main-scroll {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* ── 숨김: 사이드바·탭바·분석 차트 영역 ── */
   .no-print,
   aside, nav, header,
   .sidebar-container { display: none !important; }
 
-  /* 레이아웃 초기화 */
-  body { font-size: 11px !important; background: #fff !important; }
-  main, .main-content { padding: 0 !important; margin: 0 !important; }
-  .page-wrap { padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+  /* ── 페이지 래퍼 ── */
+  .page-wrap {
+    padding: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
 
-  /* 리포트 헤더 */
+  /* ── 리포트 헤더 (인쇄 전용) ── */
   .report-print-header { display: flex !important; }
 
-  /* 리포트 그리드: 항상 2열 */
-  .report-detail-grid { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
-  .report-summary-grid { grid-template-columns: repeat(4, 1fr) !important; }
+  /* ── 리포트 그리드: 항상 2열 ── */
+  .report-detail-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+  }
+  .report-summary-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
 
-  /* 페이지 나눔 방지 */
-  #monthly-report > div { page-break-inside: avoid; break-inside: avoid; }
-  #monthly-report section { page-break-inside: avoid; break-inside: avoid; }
+  /* ── 큰 블록은 페이지 경계에서 나눌 수 있게 허용 ── */
+  #monthly-report { page-break-inside: auto !important; }
+  #monthly-report > div { page-break-inside: auto; }
 
-  /* 색상 유지 */
+  /* ── 색상 유지 ── */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
 
