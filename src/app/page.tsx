@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { useTransactions } from '@/hooks/useTransactions'
-import { getCurrentYearMonth, formatCurrency } from '@/lib/utils'
+import { useState, useMemo } from 'react'
+import { useTransactions, useMonthlyStats } from '@/hooks/useTransactions'
+import { getCurrentYearMonth, formatCurrency, getPreviousMonths } from '@/lib/utils'
 import MonthSelector from '@/components/MonthSelector'
 import StatsCards from '@/components/StatsCards'
 import MonthlyCharts from '@/components/MonthlyCharts'
@@ -17,6 +17,10 @@ export default function DashboardPage() {
   const [month, setMonth] = useState(im)
 
   const { transactions, loading, stats } = useTransactions(year, month)
+
+  // 월별 추이 차트용 (최근 6개월)
+  const monthsFor = useMemo(() => getPreviousMonths(year, month, 6), [year, month])
+  const { stats: monthlyStats } = useMonthlyStats(monthsFor)
 
   const rate = stats.totalIncome > 0
     ? ((stats.balance / stats.totalIncome) * 100).toFixed(1)
@@ -90,7 +94,7 @@ export default function DashboardPage() {
           <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--day-text1)', marginBottom: 12 }}>
             월간 분석
           </p>
-          <MonthlyCharts transactions={transactions} stats={stats} year={year} month={month} />
+          <MonthlyCharts transactions={transactions} stats={stats} year={year} month={month} monthlyStats={monthlyStats} />
         </div>
       )}
     </div>

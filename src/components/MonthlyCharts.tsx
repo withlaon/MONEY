@@ -14,6 +14,7 @@ interface Props {
   stats: MonthlyStats
   year: number
   month: number
+  monthlyStats?: MonthlyStats[]
 }
 
 const COLORS = ['#4f46e5','#059669','#dc2626','#ea580c','#2563eb','#d97706','#7c3aed','#0891b2']
@@ -48,7 +49,7 @@ const TITLE: React.CSSProperties = {
   fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 14,
 }
 
-export default function MonthlyCharts({ transactions, stats, year, month }: Props) {
+export default function MonthlyCharts({ transactions, stats, year, month, monthlyStats = [] }: Props) {
   const [expandedCat, setExpandedCat] = useState<string | null>(null)
   const [expandedPie, setExpandedPie] = useState<'expType' | 'fixed' | null>(null)
 
@@ -113,10 +114,42 @@ export default function MonthlyCharts({ transactions, stats, year, month }: Prop
   const axStyle = { fill:'#9ca3af', fontSize:11 }
   const gridStyle = { stroke:'#e4e9f5', strokeDasharray:'3 3' }
 
+  /* 월별 추이 데이터 */
+  const monthlyChartData = monthlyStats.map(s => ({
+    name: `${s.month}월`,
+    수입: s.totalIncome,
+    지출: s.totalExpense,
+  }))
+
   if (!transactions.length) return null
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+      {/* ── 월별 수입·지출 추이 ── */}
+      {monthlyChartData.length > 1 && (
+        <div style={BOX}>
+          <p style={TITLE}>월별 수입 · 지출 추이</p>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={monthlyChartData} barGap={2} barCategoryGap="35%">
+              <CartesianGrid vertical={false} {...gridStyle} />
+              <XAxis dataKey="name" tick={axStyle} axisLine={false} tickLine={false} />
+              <YAxis tick={axStyle} axisLine={false} tickLine={false} tickFormatter={yf} width={36} />
+              <Tooltip content={<CT />} />
+              <Bar dataKey="수입" fill="#059669" radius={[3,3,0,0]} />
+              <Bar dataKey="지출" fill="#ef4444" radius={[3,3,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+          <div style={{ display:'flex', justifyContent:'center', gap:24, marginTop:8 }}>
+            {[{c:'#059669',l:'수입'},{c:'#ef4444',l:'지출'}].map(i=>(
+              <div key={i.l} style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <div style={{ width:10, height:10, background:i.c }} />
+                <span style={{ fontSize:11, fontWeight:700, color:'#9ca3af' }}>{i.l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 3열 레이아웃 */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:14 }} className="charts-3col">
