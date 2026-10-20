@@ -16,6 +16,17 @@ function fmtDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+/** dateStr(YYYY-MM-DD)에서 n개월 뒤 날짜를 반환 (월말 오버플로우 처리) */
+function addMonth(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const targetM = (m - 1) + n          // 0-indexed 총 월
+  const newY = y + Math.floor(targetM / 12)
+  const newM = targetM % 12             // 0-indexed
+  const lastDay = new Date(newY, newM + 1, 0).getDate()
+  const newD = Math.min(d, lastDay)
+  return `${newY}-${String(newM + 1).padStart(2,'0')}-${String(newD).padStart(2,'0')}`
+}
+
 function mmdd(d: Date) {
   return `${d.getMonth()+1}/${d.getDate()}`
 }
@@ -556,49 +567,104 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
     } finally { setCatSaving(false) }
   }
 
+  const [toastMsg, setToastMsg] = useState('✓ 지출이 등록되었습니다')
+
   const save = async () => {
     const raw = Number(amount.replace(/,/g, ''))
     if (!raw) { setError('금액을 입력해주세요.'); return }
+    const isInstall = CARD_METHODS.includes(payMethod) && installType === '할부' && installMonths >= 2
+    if (isInstall && installMonths > 60) { setError('할부 개월수는 60개월 이하여야 합니다.'); return }
     setSaving(true); setError('')
     try {
-      const d = new Date(date)
-      const res = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transaction_type: 'expense',
-          amount: raw,
-          transaction_date: date,
-          description: desc || null,
-          memo: memo || null,
-          payment_method: payMethod || null,
-          installment_months: CARD_METHODS.includes(payMethod) && installType === '할부' ? installMonths : 1,
-          income_source_id: null,
-          expense_category_id: catId || null,
-          expense_type: expType,
-          is_fixed: fixed,
-        }),
-      })
-      const result = await res.json()
-      if (!res.ok || result.error) throw new Error(result.error || '저장 실패')
-      clearTransactionCache(d.getFullYear(), d.getMonth() + 1)
-      // 당일 등록분만 목록에 추가
-      if (date === today()) {
+      if (isInstall) {
+        /* ── 할부: N개월에 걸쳐 각각 등록 ── */
+        const monthlyAmt = Math.floor(raw / installMonths)
         const catName = categories.find(c => c.id === catId)?.name || ''
-        const iM = CARD_METHODS.includes(payMethod) && installType === '할부' ? installMonths : 1
-        setSavedList(prev => [...prev, {
-          desc: desc || catName || '지출',
-          catName,
-          expType,
-          payMethod,
-          amount: raw,
-          installMonths: iM,
-        }])
+        for (let i = 0; i < installMonths; i++) {
+          const txDate = addMonth(date, i)
+          // 마지막 회차는 나머지 금액 포함
+          const txAmount = i === installMonths - 1 ? raw - monthlyAmt * (installMonths - 1) : monthlyAmt
+          const txMemo = `할부 ${i + 1}/${installMonths}회${memo ? ` | ${memo}` : ''}`
+          const res = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transaction_type: 'expense',
+              amount: txAmount,
+              transaction_date: txDate,
+              description: desc || null,
+              memo: txMemo,
+              payment_method: payMethod || null,
+              installment_months: 1,
+              income_source_id: null,
+              expense_category_id: catId || null,
+              expense_type: expType,
+              is_fixed: fixed,
+            }),
+          })
+          const result = await res.json()
+          if (!res.ok || result.error) throw new Error(result.error || `${i + 1}회차 저장 실패`)
+          const dd = new Date(txDate)
+          clearTransactionCache(dd.getFullYear(), dd.getMonth() + 1)
+          // 당일 등록분만 목록에 추가
+          if (txDate === today()) {
+            setSavedList(prev => [...prev, {
+              desc: desc || catName || '지출',
+              catName,
+              expType,
+              payMethod,
+              amount: txAmount,
+              installMonths,
+            }])
+          }
+        }
+        onSaved?.()
+        setAmount(''); setDesc(''); setMemo(''); setPayMethod(''); setCatId('')
+        setInstallType('일시불'); setInstallMonths(3)
+        setToastMsg(`✓ ${installMonths}개월 할부 등록 완료 (월 ${formatCurrency(monthlyAmt)}원)`)
+        setToast(true)
+        setTimeout(() => setToast(false), 3000)
+      } else {
+        /* ── 일시불: 기존 로직 ── */
+        const d = new Date(date)
+        const res = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transaction_type: 'expense',
+            amount: raw,
+            transaction_date: date,
+            description: desc || null,
+            memo: memo || null,
+            payment_method: payMethod || null,
+            installment_months: 1,
+            income_source_id: null,
+            expense_category_id: catId || null,
+            expense_type: expType,
+            is_fixed: fixed,
+          }),
+        })
+        const result = await res.json()
+        if (!res.ok || result.error) throw new Error(result.error || '저장 실패')
+        clearTransactionCache(d.getFullYear(), d.getMonth() + 1)
+        // 당일 등록분만 목록에 추가
+        if (date === today()) {
+            const catName = categories.find(c => c.id === catId)?.name || ''
+            setSavedList(prev => [...prev, {
+              desc: desc || catName || '지출',
+              catName,
+              expType,
+              payMethod,
+              amount: raw,
+              installMonths: 1,
+            }])
+          }
+          onSaved?.()
+          setAmount(''); setDesc(''); setMemo(''); setPayMethod(''); setCatId('')
+          setToastMsg('✓ 지출이 등록되었습니다')
+          setToast(true)
+          setTimeout(() => setToast(false), 2000)
       }
-      onSaved?.()
-      setAmount(''); setDesc(''); setMemo(''); setPayMethod(''); setCatId('')
-      setToast(true)
-      setTimeout(() => setToast(false), 2000)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '저장 실패')
     } finally { setSaving(false) }
@@ -720,23 +786,32 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
               ))}
             </div>
             {installType === '할부' && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {INSTALLMENT_OPTIONS.map(m => (
-                  <button key={m} type="button" onClick={() => setInstallMonths(m)}
-                    style={{
-                      padding: '6px 11px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      background: installMonths === m ? '#4f46e5' : '#f3f4f6',
-                      color: installMonths === m ? '#fff' : '#6b7280',
-                      border: `1px solid ${installMonths === m ? '#4f46e5' : '#e5e7eb'}`,
-                    }}>
-                    {m}개월
-                  </button>
-                ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="number"
+                  value={installMonths}
+                  min={2}
+                  max={60}
+                  onChange={e => {
+                    const v = parseInt(e.target.value)
+                    setInstallMonths(isNaN(v) ? 2 : Math.max(2, v))
+                  }}
+                  style={{
+                    ...INP,
+                    width: 80,
+                    textAlign: 'center',
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: '#4f46e5',
+                    padding: '10px 8px',
+                  }}
+                />
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>개월</span>
               </div>
             )}
-            {installType === '할부' && (
+            {installType === '할부' && installMonths >= 2 && (
               <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
-                월 {formatCurrency(Math.round(Number(amount.replace(/,/g,'') || 0) / installMonths))}원 × {installMonths}개월
+                월 {formatCurrency(Math.floor(Number(amount.replace(/,/g,'') || 0) / installMonths))}원 × {installMonths}개월 → 각 월에 자동 등록
               </p>
             )}
           </div>
@@ -826,7 +901,7 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
                   <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: '#dc2626' }}>-{formatCurrency(e.amount)}</div>
                     {e.installMonths > 1 && (
-                      <div style={{ fontSize: 10, color: '#9ca3af' }}>월 {formatCurrency(Math.round(e.amount / e.installMonths))}</div>
+                      <div style={{ fontSize: 10, color: '#9ca3af' }}>{e.installMonths}개월 할부 1/{e.installMonths}회</div>
                     )}
                   </div>
                 </div>
@@ -835,7 +910,7 @@ function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
           </div>
         )}
       </div>
-      {toast && <Toast msg="✓ 지출이 등록되었습니다" />}
+      {toast && <Toast msg={toastMsg} />}
     </div>
   )
 }

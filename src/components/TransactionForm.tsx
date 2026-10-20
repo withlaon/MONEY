@@ -475,22 +475,27 @@ export default function TransactionForm({ onSubmit, onClose, defaultType = 'inco
                   </div>
                   {installType === '할부' && (
                     <>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {INSTALLMENT_OPTIONS.map(m => (
-                          <button key={m} type="button" onClick={() => setInstallMonths(m)}
-                            style={{
-                              padding: '6px 11px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                              background: installMonths === m ? '#4f46e5' : '#f3f4f6',
-                              color: installMonths === m ? '#fff' : '#6b7280',
-                              border: `1px solid ${installMonths === m ? '#4f46e5' : '#e5e7eb'}`,
-                            }}>
-                            {m}개월
-                          </button>
-                        ))}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <input
+                          type="number"
+                          value={installMonths}
+                          min={2}
+                          max={60}
+                          onChange={e => {
+                            const v = parseInt(e.target.value)
+                            setInstallMonths(isNaN(v) ? 2 : Math.max(2, v))
+                          }}
+                          style={{
+                            width: 80, textAlign: 'center', fontSize: 18, fontWeight: 800,
+                            color: '#4f46e5', padding: '8px', border: '1.5px solid #c7c3fa',
+                            outline: 'none', background: '#f8faff',
+                          }}
+                        />
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>개월</span>
                       </div>
                       <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
                         월 {Number(amount.replace(/,/g,'') || 0) > 0
-                          ? `${Number(Math.round(Number(amount.replace(/,/g,'')) / installMonths)).toLocaleString('ko-KR')}원`
+                          ? `${Math.floor(Number(amount.replace(/,/g,'')) / installMonths).toLocaleString('ko-KR')}원`
                           : '—'} × {installMonths}개월
                       </p>
                     </>
